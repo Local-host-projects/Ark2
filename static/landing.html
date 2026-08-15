@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#100E0B" />
+<meta name="description" content="ARK — a time machine disguised as a social feed. Don't read history. Scroll it." />
+<link rel="icon" type="image/png" href="/icon-32.png" />
+<link rel="icon" type="image/svg+xml" href="/logo.svg" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
+<title>ARK — Don't read history. Scroll it.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css" />
+<style>
+  .landing-page{max-width:960px;margin:0 auto;padding:0 20px}
+  .landing-nav{
+    position:sticky;top:0;z-index:50;background:rgba(16,14,11,.86);
+    backdrop-filter:blur(14px);border-bottom:1px solid var(--ink-3);
+  }
+  .landing-nav .nav-in{display:flex;align-items:center;justify-content:space-between;height:var(--nav-h)}
+  .landing-links{display:flex;gap:26px;align-items:center}
+  .landing-links a{font:500 .875rem var(--sans);color:var(--paper-dim);padding:8px 0;transition:color .15s}
+  .landing-links a:hover{color:var(--paper)}
+  .landing-hero{padding:clamp(56px,10vw,120px) 0 40px;text-align:center}
+  .landing-hero .kicker{
+    display:inline-flex;align-items:center;gap:10px;margin-bottom:24px;
+    border:1px solid var(--ink-3);border-radius:999px;padding:7px 16px;
+  }
+  .landing-hero .kicker .stamp{color:var(--gold)}
+  .landing-hero h1{font:500 clamp(2.4rem,7vw,4.6rem)/1.03 var(--serif);letter-spacing:-.01em;text-wrap:balance}
+  .landing-hero h1 em{font-style:italic;color:var(--gold)}
+  .landing-hero p{max-width:54ch;margin:22px auto 0;color:var(--paper-dim);font-size:1.1rem;line-height:1.65}
+  .landing-actions{margin-top:34px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .landing-principles{margin:clamp(40px,8vw,80px) 0;border-top:1px solid var(--ink-3);padding-top:48px}
+  .landing-principles h2{font:500 clamp(1.6rem,4vw,2.4rem)/1.1 var(--serif);text-align:center;text-wrap:balance}
+  .landing-principles p.sub{color:var(--paper-dim);text-align:center;max-width:56ch;margin:14px auto 0;line-height:1.6}
+  .landing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:36px}
+  .landing-card{border:1px solid var(--ink-3);border-radius:var(--r-card);background:var(--ink-2);padding:24px}
+  .landing-card .stamp{color:var(--gold);margin-bottom:12px;display:block}
+  .landing-card h4{font:600 1.05rem var(--sans);margin-bottom:8px}
+  .landing-card p{color:var(--paper-dim);font-size:.9rem;line-height:1.6}
+  .landing-foot{border-top:1px solid var(--ink-3);padding:26px 0 44px;text-align:center}
+  .landing-foot .stamp{color:var(--paper-faint)}
+</style>
+</head>
+<body>
+
+<!-- LIVE TICKER -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track">
+    <span class="stamp"><span class="live-dot"></span><b>ARK</b> — SIMULATION ARCHIVE OPEN</span>
+    <span class="stamp">WIRE — THE PAST IS LIVE · TIMELINES COMPRESSED</span>
+    <span class="stamp">PRESS — RESEARCH DESK STANDBY</span>
+    <span class="stamp">FF — ONE MOMENT AT A TIME · THE CLOCK DECIDES</span>
+  </div>
+</div>
+
+<nav class="landing-nav" aria-label="Primary navigation">
+  <div class="wrap nav-in">
+    <a class="logo" href="/" aria-label="ARK home">
+      <span class="logo-mark"><img src="/logo.svg" alt="" width="34" height="34" /></span>
+      <span class="logo-name">ARK</span>
+    </a>
+    <div class="landing-links">
+      <a href="/#/home">Archive</a>
+      <a href="/#/create">Create</a>
+      <a href="#principles">How it works</a>
+      <a href="/#/you" class="btn btn-ghost btn-sm" id="landingAuth">Sign in</a>
+    </div>
+  </div>
+</nav>
+
+<main class="landing-page">
+  <section class="landing-hero">
+    <span class="kicker"><span class="stamp">A time machine, disguised as a feed</span></span>
+    <h1>Don't read history.<br /><em>Scroll it.</em></h1>
+    <p>ARK rebuilds great moments as living social feeds — leaders, wire services and ordinary people posting in the moment, knowing no more than their own moment knows. A new moment only arrives when its hour comes.</p>
+    <div class="landing-actions">
+      <a href="/#/home" class="btn btn-gold">Enter the archive →</a>
+      <a href="#principles" class="btn btn-ghost">How it works</a>
+    </div>
+  </section>
+
+  <section class="landing-principles" id="principles">
+    <h2>Information, not knowledge.<br />Chaos, then comprehension.</h2>
+    <p class="sub">We read feeds, not textbooks. ARK turns history into the thing we already know how to consume — a stream, in the moment, from the people who lived it. Rumor and propaganda bubble to the top, exactly as they did then; your brain does the ordering.</p>
+    <div class="landing-grid">
+      <div class="landing-card">
+        <span class="stamp">01 · The cast</span>
+        <h4>Who you'll follow</h4>
+        <p>Half the cast are needle-movers — leaders and decision-makers. A third shape the noise into narrative the public can hold: the press and analysts. The last fifth are ordinary people and passersby, who live through it and tell you how it felt.</p>
+      </div>
+      <div class="landing-card">
+        <span class="stamp">02 · The clock</span>
+        <h4>One moment at a time</h4>
+        <p>Years compress into a stream of moments, each arriving on its own schedule. Nobody in the feed knows how any of it ends — and neither can you, until you have lived the moments that came before.</p>
+      </div>
+      <div class="landing-card">
+        <span class="stamp">03 · The inner life</span>
+        <h4>Emotion & relationships</h4>
+        <p>Every agent carries a live emotional state — fear, resolve, hope — that the day's events bend. Allies, rivals and enemies shape who answers whom, and who stays silent.</p>
+      </div>
+      <div class="landing-card">
+        <span class="stamp">04 · The desk</span>
+        <h4>Research layer</h4>
+        <p>Every open moment has a briefing. The narrators organize the chaos; the desk gives you the verified context behind it, when you want more than the feed.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="landing-foot">
+  <span class="stamp">ARK — the past is live · built to be scrolled, not read</span>
+</footer>
+
+<script>
+  (function () {
+    try {
+      var user = JSON.parse(localStorage.getItem("ark_user") || "null");
+      var el = document.getElementById("landingAuth");
+      if (el && user && user.handle) {
+        el.textContent = "@" + user.handle;
+        el.href = "/#/home";
+        el.classList.add("following-on");
+      }
+    } catch (e) {}
+  })();
+</script>
+
+</body>
+</html>

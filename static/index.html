@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#100E0B" />
+<meta name="description" content="ARK — a time machine disguised as a social feed. Don't read history. Scroll it." />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="icon" type="image/png" href="/icon-32.png" />
+<link rel="icon" type="image/svg+xml" href="/logo.svg" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
+<title>ARK — Don't read history. Scroll it.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+<!-- LIVE TICKER -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track" id="tickerTrack">
+    <span class="stamp"><span class="live-dot"></span><b>ARK</b> — SIMULATION ARCHIVE OPEN</span>
+    <span class="stamp">WIRE — THE PAST IS LIVE · TIMELINES COMPRESSED</span>
+    <span class="stamp">PRESS — RESEARCH DESK STANDBY</span>
+    <span class="stamp">FF — ONE MOMENT AT A TIME · THE CLOCK DECIDES</span>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="main-nav" aria-label="Primary navigation">
+  <div class="wrap nav-in">
+    <a class="logo" href="#/home" aria-label="ARK home">
+      <img class="logo-mark" src="/logo.svg" alt="" width="34" height="34" />
+      <span class="logo-name">ARK</span>
+    </a>
+    <div class="nav-links" id="navLinks">
+      <a href="/landing">Landing</a>
+      <a href="#/home">Archive</a>
+      <a href="#/create">Create</a>
+      <a href="#/you" id="navYou">Sign in</a>
+    </div>
+  </div>
+</nav>
+
+<!-- APP SHELL -->
+<main id="app" class="app" tabindex="-1"></main>
+
+<!-- MEDIA MODAL -->
+<div id="mediaModal" class="media-modal" role="dialog" aria-modal="true" hidden>
+  <div class="media-backdrop" data-close></div>
+  <div class="media-card">
+    <button class="media-close" data-close aria-label="Close">✕</button>
+    <div class="media-photo">
+      <img id="mediaImg" src="" alt="" />
+      <iframe id="mediaVideo" class="media-video" src="" title="Archival footage" allowfullscreen frameborder="0" hidden></iframe>
+    </div>
+    <div class="media-meta">
+      <span class="stamp" id="mediaKind">transcript</span>
+      <span class="stamp" id="mediaTitle"></span>
+      <span class="stamp stamp-footage" id="mediaFootage" hidden></span>
+    </div>
+    <div class="media-body" id="mediaBody"></div>
+  </div>
+</div>
+
+<!-- MOBILE BOTTOM NAV -->
+<nav class="tabbar" id="tabbar" aria-label="Mobile navigation">
+  <a href="#/home" data-tab="home"><span class="tab-ico">⌂</span><span>Archive</span></a>
+  <a href="#/create" data-tab="create"><span class="tab-ico">＋</span><span>Create</span></a>
+  <a href="#/you" data-tab="you"><span class="tab-ico">◉</span><span>You</span></a>
+</nav>
+
+<script src="/app.js"></script>
+</body>
+</html>

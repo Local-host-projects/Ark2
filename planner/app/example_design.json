@@ -1,0 +1,138 @@
+{
+  "project": {
+    "name": "SnackShop API",
+    "description": "REST API for a small e-commerce store: users create orders containing products, with stock guarded by transactions. JWT auth, request logging, and a nightly stock reconciliation job.",
+    "architecture": "monolithic",
+    "language": "python",
+    "level": 2
+  },
+  "tables": [
+    {
+      "id": "t_user",
+      "name": "user",
+      "x": 120,
+      "y": 90,
+      "notes": "A registered customer.",
+      "columns": [
+        {"id": "c_uid", "name": "id", "type": "uuid", "pk": true, "auto": false, "nullable": false, "unique": true, "default": "", "notes": ""},
+        {"id": "c_email", "name": "email", "type": "string", "pk": false, "auto": false, "nullable": false, "unique": true, "default": "", "notes": ""},
+        {"id": "c_hash", "name": "password_hash", "type": "string", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "", "notes": "bcrypt"},
+        {"id": "c_role", "name": "role", "type": "enum", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "customer", "notes": "customer | admin"}
+      ]
+    },
+    {
+      "id": "t_prod",
+      "name": "product",
+      "x": 520,
+      "y": 90,
+      "notes": "",
+      "columns": [
+        {"id": "c_pid", "name": "id", "type": "uuid", "pk": true, "auto": false, "nullable": false, "unique": true, "default": "", "notes": ""},
+        {"id": "c_sku", "name": "sku", "type": "string", "pk": false, "auto": false, "nullable": false, "unique": true, "default": "", "notes": ""},
+        {"id": "c_name", "name": "name", "type": "string", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "", "notes": ""},
+        {"id": "c_price", "name": "price", "type": "decimal", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "", "notes": "two decimal places"},
+        {"id": "c_stock", "name": "stock", "type": "int", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "0", "notes": "must stay >= 0"}
+      ]
+    },
+    {
+      "id": "t_order",
+      "name": "order",
+      "x": 200,
+      "y": 420,
+      "notes": "",
+      "columns": [
+        {"id": "c_oid", "name": "id", "type": "uuid", "pk": true, "auto": false, "nullable": false, "unique": true, "default": "", "notes": ""},
+        {"id": "c_uid2", "name": "user_id", "type": "uuid", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "", "notes": "FK user.id"},
+        {"id": "c_status", "name": "status", "type": "enum", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "pending", "notes": "pending | paid | shipped | cancelled"},
+        {"id": "c_created", "name": "created_at", "type": "datetime", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "now()", "notes": ""}
+      ]
+    },
+    {
+      "id": "t_line",
+      "name": "order_item",
+      "x": 700,
+      "y": 420,
+      "notes": "",
+      "columns": [
+        {"id": "c_lid", "name": "id", "type": "uuid", "pk": true, "auto": false, "nullable": false, "unique": true, "default": "", "notes": ""},
+        {"id": "c_oid2", "name": "order_id", "type": "uuid", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "", "notes": "FK order.id"},
+        {"id": "c_pid2", "name": "product_id", "type": "uuid", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "", "notes": "FK product.id"},
+        {"id": "c_qty", "name": "quantity", "type": "int", "pk": false, "auto": false, "nullable": false, "unique": false, "default": "1", "notes": ">= 1"}
+      ]
+    }
+  ],
+  "relations": [
+    {"id": "r1", "fromTable": "t_user", "fromColumn": "c_uid", "toTable": "t_order", "toColumn": "c_uid2", "kind": "one-to-many", "label": "places"},
+    {"id": "r2", "fromTable": "t_order", "fromColumn": "c_oid", "toTable": "t_line", "toColumn": "c_oid2", "kind": "one-to-many", "label": "contains"},
+    {"id": "r3", "fromTable": "t_prod", "fromColumn": "c_pid", "toTable": "t_line", "toColumn": "c_pid2", "kind": "one-to-many", "label": "sold in"}
+  ],
+  "middleware": [
+    {"id": "m_auth", "name": "authenticate", "scope": "global", "routes": [], "description": "Parse the JWT from the Authorization header. On failure return 401. Set request identity.", "enabled": true},
+    {"id": "m_log", "name": "request_logger", "scope": "global", "routes": [], "description": "Log method, path, status, latency and user id to structured JSON.", "enabled": true},
+    {"id": "m_admin", "name": "require_admin", "scope": "routes", "routes": [], "description": "Reject the request unless identity.role == admin. Return 403 otherwise.", "enabled": true}
+  ],
+  "routes": [
+    {
+      "id": "rt_signup",
+      "method": "POST",
+      "path": "/auth/signup",
+      "table": "t_user",
+      "summary": "Register a new customer.",
+      "middleware": [],
+      "functionBatches": [
+        {"id": "fb1", "name": "hash_password", "description": "bcrypt hash the plaintext password."},
+        {"id": "fb2", "name": "insert_user", "description": "Insert a row into @user with unique-email conflict mapped to 409."},
+        {"id": "fb3", "name": "issue_token", "description": "Create signed JWT with sub=@user:C:id role=@user:C:role."}
+      ],
+      "execution": "free: I want signup to be idempotent-safe: on duplicate email return a stable 409 with a machine-readable error code, and never leak whether an email exists elsewhere. Emails must be validated format-wise before hashing.",
+      "notes": ""
+    },
+    {
+      "id": "rt_products",
+      "method": "GET",
+      "path": "/products",
+      "table": "t_prod",
+      "summary": "List products with optional ?limit and ?cursor pagination.",
+      "middleware": [],
+      "functionBatches": [
+        {"id": "fb4", "name": "list_products", "description": "Select published products from @product, order by name, cursor paginated."}
+      ],
+      "execution": "Return only fields the catalog exposes (id, sku, name, price). Hide stock from non-admin callers.",
+      "notes": ""
+    },
+    {
+      "id": "rt_create_order",
+      "method": "POST",
+      "path": "/orders",
+      "table": "t_order",
+      "summary": "Create an order with line items, decrementing stock atomically.",
+      "middleware": ["m_auth", "m_admin"],
+      "functionBatches": [
+        {"id": "fb5", "name": "validate_lines", "description": "Assert every product exists and quantity >= 1. 400 otherwise."},
+        {"id": "fb6", "name": "check_stock", "description": "SELECT stock FROM @product WHERE id=? FOR UPDATE for each line; fail whole order if any run short."},
+        {"id": "fb7", "name": "insert_order", "description": "Insert the order and its lines in one transaction."},
+        {"id": "fb8", "name": "decrement_stock", "description": "UPDATE @product SET stock = stock - ? per line."}
+      ],
+      "execution": "run function batches in order inside a single DB transaction, rollback on any failure. Put the order id, not the child item ids, in the response body.",
+      "notes": "cancellation job releases stock"
+    },
+    {
+      "id": "rt_order_detail",
+      "method": "GET",
+      "path": "/orders/{order_id}",
+      "table": "t_order",
+      "summary": "Fetch one order with its lines.",
+      "middleware": ["m_auth"],
+      "functionBatches": [
+        {"id": "fb9", "name": "load_order", "description": "Load @order joined with its @order_item lines where id matches and user_id equals the caller, else 404."}
+      ],
+      "execution": "",
+      "notes": ""
+    }
+  ],
+  "jobs": [
+    {"id": "j1", "name": "expire_pending_orders", "schedule": "every 10 minutes", "duration": "< 1 min", "execution": "Find @order rows older than 30 minutes in pending status, mark them cancelled and add their quantities back to @product.stock. Use a small batch size and log every release.", "enabled": true},
+    {"id": "j2", "name": "nightly_reconcile", "schedule": "daily 02:00", "duration": "< 5 min", "execution": "Compare a stock level report against the sum of open line quantities and flag discrepancies to ops.", "enabled": true}
+  ],
+  "feedback": []
+}

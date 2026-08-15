@@ -1,0 +1,26 @@
+# Secrets — never commit
+.env
+envkeys.py
+envkeys.txt
+
+# Runtime state
+ark.db
+ark.db-shm
+ark.db-wal
+*.log
+
+# Diagnostics / one-off scripts
+auth_probe.py
+servecheck.txt
+check_voice.py
+cap.py
+cap2.py
+cap3.py
+wipe.py
+verify.py
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
