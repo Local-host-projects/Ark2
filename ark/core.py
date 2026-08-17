@@ -617,17 +617,83 @@ def _offline_post(agent, event, target=None):
     title = event["title"]
 
     emo_lines = {
-        "fear": ["There is a cold that has nothing to do with weather.", "I keep checking the windows.", "The fear is honest, so I say it plainly."],
-        "grief": ["Something in me has gone quiet.", "I have no words that feel big enough.", "The loss is not yet counted, but it is already here."],
-        "anger": ["I am done being patient.", "This has gone too far to forgive quietly.", "Let them remember they were warned."],
-        "hope": ["Against all arithmetic, I feel lighter today.", "Maybe this is the turn.", "There is a crack in the dark, and it is widening."],
-        "resolve": ["We hold. That is the whole of the strategy.", "What must be done will be done.", "I have made up my mind, and it will not be moved."],
-        "pride": ["I could not be prouder of what is being asked of us.", "This is what we were built for.", "History will note the hour, and we are in it."],
-        "shock": ["I did not believe it until it was announced.", "I am still turning it over.", "The room went silent when the news came."],
-        "joy": ["For the first time in a long time, the street is loud with gladness.", "I could not stop smiling and I did not try.", "Today the world earned a little brightness."],
-        "worry": ["I am tallying the cost before anyone else will.", "I hope someone is asking the hard questions.", "The calm before this has me on edge."],
-        "relief": ["The breath I have been holding is finally out.", "It is over, or close enough to see.", "I am tired, and I am glad, and I am not ashamed of either."],
-        "calm": ["One step, then the next. That is all.", "I will not be hurried into fear.", "Steady is its own kind of courage."],
+        "fear": [
+            "There is a cold that has nothing to do with weather.",
+            "I keep checking the windows.",
+            "The fear is honest, so I say it plainly.",
+            "I sleep with the wireless on now; the silence is worse than the news.",
+            "We used to argue about the price of coal. Now we argue about the blackout curtains.",
+        ],
+        "grief": [
+            "Something in me has gone quiet.",
+            "I have no words that feel big enough.",
+            "The loss is not yet counted, but it is already here.",
+            "I keep setting an extra place at the table without meaning to.",
+            "The neighbours speak a little softer now, and it is worse, not better.",
+        ],
+        "anger": [
+            "I am done being patient.",
+            "This has gone too far to forgive quietly.",
+            "Let them remember they were warned.",
+            "I said to myself I would not raise my voice. Then the radio came on.",
+            "They count on our tempers cooling. That is the whole of their arithmetic.",
+        ],
+        "hope": [
+            "Against all arithmetic, I feel lighter today.",
+            "Maybe this is the turn.",
+            "There is a crack in the dark, and it is widening.",
+            "My mother said hope is a ration that costs nothing and is never scarce.",
+            "The shopkeeper smiled today. In times like these, that is a bulletin.",
+        ],
+        "resolve": [
+            "We hold. That is the whole of the strategy.",
+            "What must be done will be done.",
+            "I have made up my mind, and it will not be moved.",
+            "We carry on until carrying on becomes the habit.",
+            "No one asked how long. We simply decided it was our turn.",
+        ],
+        "pride": [
+            "I could not be prouder of what is being asked of us.",
+            "This is what we were built for.",
+            "History will note the hour, and we are in it.",
+            "We did not choose this hour, but we will be equal to it.",
+            "I told my daughter: years from now, you will say you were there.",
+        ],
+        "shock": [
+            "I did not believe it until it was announced.",
+            "I am still turning it over.",
+            "The room went silent when the news came.",
+            "I heard it on the street before the wireless had it, and still did not believe it.",
+            "There are hours a person remembers word for word. This is one.",
+        ],
+        "joy": [
+            "For the first time in a long time, the street is loud with gladness.",
+            "I could not stop smiling and I did not try.",
+            "Today the world earned a little brightness.",
+            "People I have never spoken to are shaking hands in the road.",
+            "It has been so long since the bells meant something good.",
+        ],
+        "worry": [
+            "I am tallying the cost before anyone else will.",
+            "I hope someone is asking the hard questions.",
+            "The calm before this has me on edge.",
+            "I keep doing the sums and the sums keep coming out the same way.",
+            "We laughed to keep warm this morning, but the laugh ran out.",
+        ],
+        "relief": [
+            "The breath I have been holding is finally out.",
+            "It is over, or close enough to see.",
+            "I am tired, and I am glad, and I am not ashamed of either.",
+            "I telephoned home first, then the paper. Family wins today.",
+            "I did not realise how tightly I had been holding my shoulders until they dropped.",
+        ],
+        "calm": [
+            "One step, then the next. That is all.",
+            "I will not be hurried into fear.",
+            "Steady is its own kind of courage.",
+            "The kettle is on. The world can wait five minutes.",
+            "I have learned to treat panic like weather: it passes, but the street stays.",
+        ],
     }
 
     if cat == "leader":
@@ -636,12 +702,16 @@ def _offline_post(agent, event, target=None):
                 f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))} The decision is made, and it will stand.",
                 f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))} We act now, and we act together.",
                 f"{title}. I have weighed it long enough. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
+                f"{title} — this is not a hope but a determination. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
+                f"{title}. The hour calls, and the hour will not wait. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
             ])
         else:
             post = random.choice([
                 f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))} We meet the moment, and we decide.",
                 f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))} There is no turning back, and I would not if I could.",
                 f"{title}. I have thought it through. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
+                f"{title}. History is watching us today, and we have chosen not to disappoint it. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
+                f"{title}. Say it plainly: we are at the hinge. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
             ])
     elif cat == "news":
         stamp = _date_stamp(event)
@@ -661,6 +731,8 @@ def _offline_post(agent, event, target=None):
             f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
             f"{title} — you hear it in the street before you read it anywhere. {random.choice(emo_lines.get(emo, emo_lines['calm']))}",
             f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))} I am still trying to believe the morning.",
+            f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))} I have said it to myself ten times and it has not become easier.",
+            f"{title}. {random.choice(emo_lines.get(emo, emo_lines['calm']))} The street talks of little else today.",
         ])
 
     if target:
@@ -896,28 +968,21 @@ def _offline_media(agent, event, kind, other_name=None):
     }.get(emo, "One step, then the next. That is all.")
     stamp = _date_stamp(event)
     if kind == "speech":
-        return (
-            f"{media_title}.\n\n"
-            f"{line} We meet this hour, and we decide. There is no turning back, and I "
-            f"would not if I could.\n\n"
-            f"— {name} · {stamp or 'in session'}".strip()
-        )
+        return random.choice([
+            f"{media_title}.\n\n{line} We meet this hour, and we decide. There is no turning back, and I would not if I could.\n\n— {name} · {stamp or 'in session'}".strip(),
+            f"{media_title}.\n\n{line} This moment belongs to no one party and no one man — it belongs to all of us, and we are its answer.\n\n— {name} · {stamp or 'in session'}".strip(),
+        ])
     if kind == "interview":
         who = other_name or name
-        return (
-            f"{name}: {media_title or title}. Let me begin with the hour itself — how "
-            f"are you reading it?\n\n"
-            f"{who}: {line} We act as the moment demands, and we answer to history.\n\n"
-            f"{name}: And the voices urging caution?\n\n"
-            f"{who}: One step, then the next. That is the whole of the strategy.\n\n"
-            f"— on the wireless, {stamp or ''}".strip()
-        )
+        return random.choice([
+            f"{name}: {media_title or title}. Let me begin with the hour itself — how are you reading it?\n\n{who}: {line} We act as the moment demands, and we answer to history.\n\n{name}: And the voices urging caution?\n\n{who}: One step, then the next. That is the whole of the strategy.\n\n— on the wireless, {stamp or ''}".strip(),
+            f"{name}: {media_title or title}. What would you say to those at home this evening?\n\n{who}: {line} We will not be hurried out of our courage.\n\n{name}: Some say the cost is too high.\n\n{who}: The cost of inaction is higher. We have done the arithmetic.\n\n— on the wireless, {stamp or ''}".strip(),
+        ])
     if kind == "broadcast":
-        return (
-            f"{stamp} — {media_title}.\n\n"
-            f"{line} The nation will be told plainly, and we will carry on.\n\n"
-            f"Broadcast by {name}.".strip()
-        )
+        return random.choice([
+            f"{stamp} — {media_title}.\n\n{line} The nation will be told plainly, and we will carry on.\n\nBroadcast by {name}.".strip(),
+            f"{stamp} — {media_title}.\n\n{line} We have been waiting for this hour, and now it is here. Carry on, and carry on well.\n\nBroadcast by {name}.".strip(),
+        ])
     return (
         f"{stamp or 'OFFICIAL'} — {media_title or title}.\n\n"
         f"{line} Further statements will be issued as events develop.\n\n"
@@ -2114,6 +2179,55 @@ def get_agent_posts(scenario_key, agent_key, user_id=None, up_to_day=None):
             p["dislikes"] += extra_dislikes
             p["agent"] = agent
     return out
+
+
+def agent_conversation_partners(scenario_key, agent_key, up_to_day=None):
+    """The other accounts this agent has actually been in conversation with:
+    who they replied to, and who replied to them. Returns counts per peer,
+    so a profile can show the social shape of the cast, not just the graph."""
+    with db.cursor() as cur:
+        rows = cur.execute(
+            "SELECT p.parent_id FROM posts p WHERE p.scenario_key=? "
+            "AND p.agent_key=? AND p.parent_id IS NOT NULL"
+            + (" AND p.day<=?" if up_to_day is not None else ""),
+            (scenario_key, agent_key) + ((up_to_day,) if up_to_day is not None else ()),
+        ).fetchall()
+        parent_ids = [r["parent_id"] for r in rows]
+    to = {}
+    if parent_ids:
+        marks = ",".join("?" for _ in parent_ids)
+        with db.cursor() as cur:
+            heads = cur.execute(
+                f"SELECT id, agent_key FROM posts WHERE id IN ({marks})", parent_ids
+            ).fetchall()
+        for h in heads:
+            to[h["agent_key"]] = to.get(h["agent_key"], 0) + 1
+
+    from_ = {}
+    with db.cursor() as cur:
+        rows = cur.execute(
+            "SELECT p.agent_key, COUNT(*) AS n FROM posts p "
+            "JOIN posts head ON head.id=p.parent_id "
+            "WHERE p.scenario_key=? AND head.agent_key=?"
+            + (" AND p.day<=?" if up_to_day is not None else "")
+            + " AND p.agent_key!=? GROUP BY p.agent_key ORDER BY n DESC LIMIT 6",
+            (scenario_key, agent_key)
+            + ((up_to_day,) if up_to_day is not None else ())
+            + (agent_key,),
+        ).fetchall()
+        for r in rows:
+            from_[r["agent_key"]] = r["n"]
+
+    agents = _agent_map(scenario_key)
+    names = {
+        key: (dict(agents.get(key) or {})).get("name", key)
+        for key in set(to) | set(from_)
+    }
+    return {
+        "replied_to": sorted(to.items(), key=lambda kv: kv[1], reverse=True)[:6],
+        "replied_from": sorted(from_.items(), key=lambda kv: kv[1], reverse=True)[:6],
+        "names": names,
+    }
 
 
 def get_post_thread(post_id, user_id=None):

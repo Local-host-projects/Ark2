@@ -447,12 +447,27 @@ def agent_profile(key: str, agent_key: str, authorization: str | None = Header(N
     replies = [p for p in posts if p["parent_id"]]
     originals = [p for p in posts if not p["parent_id"]]
     following = bool(u) and core.is_following(u["id"], key, agent_key)
+    first_post = originals[0] if originals else (posts[0] if posts else None)
+    talked_to = {}
+    if u:
+        talked_to = core.agent_conversation_partners(key, agent_key, allowed - 1)
     return {
         "agent": agent,
         "originals": len(originals),
         "replies": len(replies),
         "posts": posts,
         "following": following,
+        "first_seen": (
+            {
+                "day": first_post["day"],
+                "date": first_post.get("date", ""),
+                "text": first_post.get("text", ""),
+                "clock": first_post.get("clock", ""),
+            }
+            if first_post
+            else None
+        ),
+        "talked_to": talked_to,
     }
 
 

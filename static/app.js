@@ -212,6 +212,14 @@ function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
   const bodyHTML = kind
     ? `<div class="media-text media-${kind}">${photo}${mediaLinesHTML(post.text, Number(post.id))}</div>`
     : `<p class="post-body">${body}</p>`;
+  const repliers = (post.replies || []).slice(0, 3);
+  const replierCount = (post.replies || []).length;
+  const socialProof = replierCount > 0
+    ? `<div class="post-social" data-action="thread" data-post="${Number(post.id)}" role="button" tabindex="0">
+        <span class="ps-avatars">${repliers.map((r) => avatarHTML(r.agent, "xs")).join("")}</span>
+        <span class="ps-text">${esc(repliers.map((r) => r.agent?.name || r.agent_key).join(", "))}${replierCount > repliers.length ? ` and ${replierCount - repliers.length} more` : ""} replied</span>
+      </div>`
+    : "";
   return `
   <article class="post ${isReply ? "is-reply" : ""}${kind ? ` kind-${kind}` : ""}${fresh ? "" : " static"}" style="animation-delay:${delay}s">
     <a href="${agentHref(sc.key, a)}">${avatarHTML(a, "", { mood: true })}</a>
@@ -226,6 +234,7 @@ function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
         ${timeHTML(post)}
       </div>
       ${bodyHTML}
+      ${socialProof}
       <div class="post-actions">
         ${follow}
         <button class="act like-btn ${liked}" data-action="like" data-post="${Number(post.id)}" aria-label="Like post" aria-pressed="${liked ? "true" : "false"}"><span class="heart">♥</span> <span class="like-count">${likes}</span></button>
@@ -437,7 +446,7 @@ function watchWorldBuild(sc) {
 
 function wirePostActions(root, scenarioKey) {
   root.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-action]");
+    const button = event.target.closest("[data-action]");
     if (!button || !root.contains(button)) return;
     const postId = Number(button.dataset.post);
     if (button.dataset.action === "like" && Number.isInteger(postId)) {
@@ -448,6 +457,15 @@ function wirePostActions(root, scenarioKey) {
       openMediaModal(button.dataset.media);
     } else if (button.dataset.action === "thread" && Number.isInteger(postId)) {
       location.hash = `#/scenario/${routePart(scenarioKey)}/post/${postId}`;
+    }
+  });
+  root.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const node = event.target.closest("[data-action]");
+    if (!node || !root.contains(node)) return;
+    event.preventDefault();
+    if (node.dataset.action === "thread" && Number.isInteger(Number(node.dataset.post))) {
+      location.hash = `#/scenario/${routePart(scenarioKey)}/post/${Number(node.dataset.post)}`;
     }
   });
 }
@@ -480,6 +498,10 @@ async function scenario(key, selectedDay = null, tab = "feed") {
   const sc = await api(`/api/scenario/${encodedKey}`);
   App.scenario = sc;
   App.feed = [];
+  App._renderIds = null;
+  App._renderMode = null;
+  App._renderUpTo = null;
+  App._renderMaxId = 0;
   App.days = sc.days;
   App.scenarioTab = tab;
   const ent = await api(`/api/scenario/${encodedKey}/enter`, { method: "POST" });
@@ -535,8 +557,37 @@ async function loadFeed(sc, upTo) {
     if (sig === App._feedSig && App._feedUpTo === App.up_to) return;
     App._feedSig = sig;
     App._feedUpTo = App.up_to;
-    renderFeed(sc);
+    if (appendFeedDelta(sc)) renderFeed(sc);
   }
+}
+
+/* True incremental feed: when polling adds new posts but nothing is removed or
+   reordered (same mode, same window), append only the newly-arrived nodes to the
+   existing DOM instead of rebuilding the whole feed. Returns false when a full
+   re-render is required (new mode, window moved, replies folded into old heads). */
+function appendFeedDelta(sc) {
+  const wrap = $("#feedWrap");
+  const thread = wrap && $(".thread-feed", wrap);
+  const already = App._renderIds;
+  const sameMode = App._renderMode === App.feedMode && App._renderUpTo === App.up_to;
+  const prevSet = already instanceof Set && already.size > 0;
+  if (!thread || !prevSet || !sameMode) return true;
+  if (already.size >= App.feed.length) return true;
+  const newPosts = App.feed.filter((p) => !already.has(Number(p.id)));
+  const newHeads = newPosts.filter((p) => !p.parent_id);
+  if (!newHeads.length) return true;
+  const newById = new Map(newPosts.map((p) => [Number(p.id), p]));
+  const hasOrphanReply = newPosts.some((p) => p.parent_id && !newById.has(p.parent_id) && already.has(Number(p.parent_id)));
+  if (hasOrphanReply) return true;
+  thread.insertAdjacentHTML("beforeend", postsHTML(newHeads, sc));
+  renderWorldWire(sc);
+  const more = $("#feedMore");
+  if (more) renderFeedMore(sc, more);
+  newPosts.forEach((p) => { already.add(Number(p.id)); });
+  App._renderMaxId = Math.max(App._renderMaxId || 0, ...newPosts.map((p) => Number(p.id)));
+  App._renderMode = App.feedMode;
+  App._renderUpTo = App.up_to;
+  return false;
 }
 
 function fmtClock(total) {
@@ -611,6 +662,10 @@ function renderFeed(sc) {
       <button class="fm${App.feedMode === "for_you" ? " on" : ""}" data-mode="for_you" role="tab" aria-selected="${App.feedMode === "for_you"}">For You</button>` : ""}
     </div>
 
+    ${timelineRailHTML(sc)}
+
+    <div id="worldWire" class="world-wire" aria-hidden="true"></div>
+
     <div id="streetPanel" class="street-panel"></div>
 
     <div id="feedWrap"></div>
@@ -631,21 +686,13 @@ function renderFeed(sc) {
     : emptyFeed;
 
   const more = $("#feedMore");
-  if (sealed) {
-    more.innerHTML = `<div class="seal-block"><span class="stamp">THE NEXT MOMENT IS STILL HAPPENING</span><p>The feed arrives on its own clock — nobody in it knows how anything ends yet, and neither can you.</p></div>`;
-  } else if (cur < dayMax) {
-    more.innerHTML = `<div style="text-align:center;padding:16px"><button class="btn btn-gold" id="genMore">See what happens next →</button></div>`;
-    $("#genMore").onclick = () => {
-      more.innerHTML = `<div class="status"><span class="spin"></span><span class="stamp">NEXT DISPATCH ARRIVING…</span></div>`;
-      loadFeed(sc, cur + 1);
-    };
-  } else {
-    more.innerHTML = `<div class="seal-block"><span class="stamp">THE ARCHIVE ENDS HERE</span><p>The last moment has arrived. You have lived this world through, moment by moment, with no way to jump ahead of it. A new world can begin whenever you are ready.</p></div>`;
-  }
+  renderFeedMore(sc, more);
 
   startUnlockCountdown();
   wirePostActions(feedWrap, sc.key);
   renderStreetPanel(sc);
+  renderWorldWire(sc);
+  wireTimelineRail(sc);
 
   if (savedScroll > 0) requestAnimationFrame(() => window.scrollTo(0, savedScroll));
 
@@ -678,11 +725,87 @@ function renderFeed(sc) {
   }
 
   revealObserve(el);
+
+  App._renderIds = new Set(feeds.map((p) => Number(p.id)));
+  App._renderMode = App.feedMode;
+  App._renderUpTo = App.up_to;
+  App._renderMaxId = feeds.reduce((m, p) => Math.max(m, Number(p.id) || 0), 0);
+}
+
+function timelineRailHTML(sc) {
+  const days = Math.max(sc.days - 1, 0);
+  const cur = Math.min(App.up_to ?? 0, days);
+  const tl = sc.timeline || [];
+  const open = App.openDays || 1;
+  const dots = [];
+  for (let i = 0; i <= days; i++) {
+    const date = tl[i]?.date || "";
+    const openDay = i < open;
+    const isNow = i === cur;
+    dots.push(`
+      <button class="rail-dot${isNow ? " now" : ""}${openDay ? " open" : " sealed"}"
+        style="left:${days ? (i / days) * 100 : 50}%"
+        data-day="${i}"
+        title="${esc(date || `Moment ${i + 1}`)}${openDay ? "" : " — not yet reached"}"
+        aria-label="${esc(date || `Moment ${i + 1}`)}${openDay ? "" : " (sealed)"}"
+        ${openDay ? "" : "disabled"}>
+        <span class="rail-date">${esc(date)}</span>
+      </button>`);
+  }
+  const curDate = tl[cur]?.date || "";
+  return `
+  <div class="timeline-rail" id="timelineRail" role="group" aria-label="Your place in this timeline">
+    ${dots.join("")}
+    <span class="rail-caption"><span class="rail-here">●</span> You are here · ${esc(curDate || "opening moment")}</span>
+  </div>`;
+}
+
+function wireTimelineRail(sc) {
+  const rail = $("#timelineRail");
+  if (!rail) return;
+  $$(".rail-dot", rail).forEach((dot) => {
+    if (dot.disabled) return;
+    dot.onclick = () => {
+      const day = Number(dot.dataset.day);
+      if (Number.isInteger(day) && day !== (App.up_to ?? 0)) {
+        location.hash = `#/scenario/${routePart(sc.key)}/day/${day}`;
+      }
+    };
+  });
+}
+
+function renderWorldWire(sc) {
+  const el = $("#worldWire");
+  if (!el) return;
+  const tl = (sc.timeline || []).filter((e) => (e.day ?? 0) <= (App.up_to ?? 0));
+  if (!tl.length) { el.innerHTML = ""; return; }
+  const items = tl.slice(-5).map((e) => `${esc(e.date || "")} — ${esc(e.title || "")}`);
+  const inner = `<div class="world-wire-track">${[...items, ...items].map((i) => `<span class="wire-item">${i}</span>`).join("")}</div>`;
+  el.innerHTML = `<span class="stamp wire-label"><span class="live-dot"></span> THE WIRE</span>${inner}`;
 }
 
 function setFeedError(msg) {
   const el = $("#feedError");
   if (el) el.innerHTML = `<div class="err-banner">Could not reach the archive: ${esc(msg)}</div>`;
+}
+
+function renderFeedMore(sc, more) {
+  if (!more) return;
+  const dayMax = Math.max(sc.days - 1, 0);
+  const cur = Math.min(App.up_to ?? 0, dayMax);
+  const sealed = cur >= App.openDays - 1 && App.openDays < sc.days;
+  if (sealed) {
+    more.innerHTML = `<div class="seal-block"><span class="stamp">THE NEXT MOMENT IS STILL HAPPENING</span><p>The feed arrives on its own clock — nobody in it knows how anything ends yet, and neither can you.</p></div>`;
+  } else if (cur < dayMax) {
+    more.innerHTML = `<div style="text-align:center;padding:16px"><button class="btn btn-gold" id="genMore">See what happens next →</button></div>`;
+    const gen = $("#genMore");
+    if (gen) gen.onclick = () => {
+      more.innerHTML = `<div class="status"><span class="spin"></span><span class="stamp">NEXT DISPATCH ARRIVING…</span></div>`;
+      loadFeed(sc, cur + 1);
+    };
+  } else {
+    more.innerHTML = `<div class="seal-block"><span class="stamp">THE ARCHIVE ENDS HERE</span><p>The last moment has arrived. You have lived this world through, moment by moment, with no way to jump ahead of it. A new world can begin whenever you are ready.</p></div>`;
+  }
 }
 
 /* ------------------------------------------------- scenario views: front page / trending / search */
@@ -1095,6 +1218,25 @@ async function profile(scenarioKey, agentKey) {
   }
 
   const el = $("#app");
+  const first = data.first_seen;
+  const talked = data.talked_to || { replied_to: [], replied_from: [], names: {} };
+  const talkNames = (list) => list.map(([key]) => {
+    const nm = talked.names[key] || key;
+    return `<a class="rel-chip" href="${agentHref(scenarioKey, { agent_key: key })}">${esc(nm)}</a>`;
+  }).join("");
+  const backstoryHTML = first
+    ? `<div class="profile-side">
+        <span class="stamp">FIRST ON THE WIRE</span>
+        <p>${esc(first.date || "the opening moment")}${first.clock ? ` · ${esc(first.clock)}` : ""} — they entered the record with “${esc((first.text || "").slice(0, 140))}${(first.text || "").length > 140 ? "…" : ""}”</p>
+      </div>`
+    : "";
+  const socialHTML = (talked.replied_to.length || talked.replied_from.length)
+    ? `<div class="profile-side">
+        <span class="stamp">WHO THEY TALK TO</span>
+        ${talked.replied_to.length ? `<p class="p-side-label">Answers to</p><div class="rel-chips">${talkNames(talked.replied_to)}</div>` : ""}
+        ${talked.replied_from.length ? `<p class="p-side-label">Heard from</p><div class="rel-chips">${talkNames(talked.replied_from)}</div>` : ""}
+      </div>`
+    : "";
   el.innerHTML = `
   <div class="view">
     <a href="#/scenario/${routePart(scenarioKey)}" class="btn btn-ghost btn-sm" style="margin-top:16px">Back to feed</a>
@@ -1124,6 +1266,8 @@ async function profile(scenarioKey, agentKey) {
         <span class="stamp">Voice</span>
         <p>${esc(a.voice || "A voice in this world.")}</p>
       </div>
+      ${backstoryHTML}
+      ${socialHTML}
     </div>
 
     <div style="max-width:660px">
