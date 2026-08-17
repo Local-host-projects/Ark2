@@ -291,6 +291,8 @@ nav.main-nav{
 .media-text.media-interview{border-left-color:var(--olive)}
 .media-text.media-press{border-left-color:var(--paper-faint)}
 .post-time-ghost{color:transparent}
+.post-time-stamp{color:var(--paper-faint);text-transform:uppercase}
+.post-time-dist{margin-left:5px;color:var(--vermilion)!important;letter-spacing:.08em;border:1px solid rgba(218,88,62,.35);border-radius:3px;padding:0 4px;font-weight:600}
 
 /* ---- media photo + dialogue ---- */
 .media-img-btn{display:block;width:100%;margin-bottom:14px;padding:0;background:none;border:none;cursor:zoom-in}
@@ -340,6 +342,7 @@ body.modal-open{overflow:hidden}
   border-bottom:1px solid var(--ink-3);
   opacity:0;transform:translateY(8px);animation:arrive .5s var(--ease) forwards;
 }
+.post.static{opacity:1;transform:none;animation:none}
 .thread > .post:first-child{padding-top:22px}
 @keyframes arrive{to{opacity:1;transform:none}}
 .post.is-reply{

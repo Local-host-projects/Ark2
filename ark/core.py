@@ -946,7 +946,7 @@ def _generate_media(scenario_key, event):
         return None
     agent = _shifted_agent(author, event)
     text = None
-    model = llm.muse_model() if kind == "interview" else None
+    model = llm.voice_model() if llm.llm_available() else None
     if llm.llm_available():
         system = (
             "You are ARK, a living temporal simulation. A real person is, at this "
@@ -1932,8 +1932,47 @@ def get_feed(scenario_key, up_to_day=None, user_id=None, mode="chrono"):
         items.append(d)
 
     if mode == "for_you" and user_id and items:
-        items = _rank_for_you(items, user_id)
+        items = _rank_for_you(items, user_id, cur_day=up_to_day)
     return items
+
+
+def _rank_for_you(items, user_id, cur_day=None):
+    """Rank posts for a viewer within each feed-day: followed accounts lead,
+    then vote-affinity, attention signals, shared interests, engagement.
+
+    cur_day anchors the page to the viewer's present: the baseline day the
+    feed is being read from. Postings from that day are treated as "now" and
+    slightly weighted up; the feed still stays in day order so the no-spoiler
+    contract survives the ranking.
+    """
+    followed, affinity, taste, profile = _for_you_taste(user_id, items[0]["scenario_key"])
+    baseline = cur_day if cur_day is not None else items[0].get("day", 0)
+
+    def score(post):
+        key = post["agent_key"]
+        s = 0.0
+        if key in followed:
+            s += 120.0
+        pos, neg = affinity.get(key, (0, 0))
+        s += pos * 22.0 - neg * 28.0
+        s += profile.get(key, 0.0)
+        interests = (post.get("agent") or {}).get("interests") or []
+        s += sum(taste.get(tag, 0) for tag in interests) * 4.0
+        s += min(post["likes"] + post["dislikes"], 60) * 0.3
+        # "now" gets a small boost so the present day's moment reads as live.
+        if post.get("day") == baseline:
+            s += 8.0
+        return s
+
+    by_day = {}
+    for post in items:
+        by_day.setdefault(post["day"], []).append(post)
+    ordered = []
+    for day in sorted(by_day):
+        # stable sort: ties keep chronological order within the day
+        group = sorted(by_day[day], key=score, reverse=True)
+        ordered.extend(group)
+    return ordered
 
 
 def _for_you_taste(user_id, scenario_key):
@@ -1976,39 +2015,6 @@ def _for_you_taste(user_id, scenario_key):
             profile.get(r["agent_key"], 0.0) + weight * min(r["count"], 25)
         )
     return followed, affinity, taste, profile
-
-
-def _rank_for_you(items, user_id):
-    """Rank posts for a viewer within each feed-day: followed accounts lead,
-    then vote-affinity, attention signals, shared interests, engagement.
-
-    The timeline stays in day order — the feed never reveals a later moment
-    before an earlier one — so the no-spoiler contract survives the ranking.
-    """
-    followed, affinity, taste, profile = _for_you_taste(user_id, items[0]["scenario_key"])
-
-    def score(post):
-        key = post["agent_key"]
-        s = 0.0
-        if key in followed:
-            s += 120.0
-        pos, neg = affinity.get(key, (0, 0))
-        s += pos * 22.0 - neg * 28.0
-        s += profile.get(key, 0.0)
-        interests = (post.get("agent") or {}).get("interests") or []
-        s += sum(taste.get(tag, 0) for tag in interests) * 4.0
-        s += min(post["likes"] + post["dislikes"], 60) * 0.3
-        return s
-
-    by_day = {}
-    for post in items:
-        by_day.setdefault(post["day"], []).append(post)
-    ordered = []
-    for day in sorted(by_day):
-        # stable sort: ties keep chronological order within the day
-        group = sorted(by_day[day], key=score, reverse=True)
-        ordered.extend(group)
-    return ordered
 
 
 def record_signal(user_id, scenario_key, agent_key, kind="read"):
@@ -2536,7 +2542,8 @@ def _llm_scenario_lite(title_hint, combined):
         ' "agents": [{"key": str, "name": str, "handle": str, "category": "leader|news|individual", '
         '"verified": bool, "avatar_type": "dicebear|text", "bio": str, "voice": str describing how '
         "they talk and what they want, \"interests\": [str]}],\n"
-        '"events": [{"day": int, "date": str, "title": str, "involved": [agent keys], "tags": [str]}],\n'
+        ' "events": [{"day": int, "date": str, "title": str, "involved": [agent keys], "tags": [str], '
+        '"media": "" | "speech" | "broadcast" | "interview" | "press", "media_title": str}],\n'
         '"population": [{"name": str, "handle": str, "bio": str, "voice": str, "interests": [str]}]\n'
         "}\n"
         "Rules you MUST follow:\n"
@@ -2565,6 +2572,13 @@ def _llm_scenario_lite(title_hint, combined):
         "    protagonist of every single day. A news/synthesizer organ can be involved in any event it "
         "    would report.\n"
         "- Each event's 'involved' must reference at least one agent key from your cast.\n"
+        "- Mark 1-2 events across the arc as MEDIA: a pivotal speech, interview, broadcast "
+        "or press event. Give such events a 'media' value of exactly one of "
+        "speech|broadcast|interview|press (leave it \"\" for normal events) and a "
+        "'media_title' naming the actual speech/interview/broadcast as a headline "
+        "(e.g. \"Programme notes for a debut\"). Media events become one branded "
+        "transcript card with archival footage, so choose the moment the world "
+        "stopped to listen.\n"
         "- Ground everything in the given material: real people, places, dates and stakes."
     )
     user = f"Era/topic hint: {title_hint}\nSource material:\n{combined[:6000]}"
@@ -2652,6 +2666,9 @@ def _normalize_scenario_schema(schema):
         title = _bounded_text(raw.get("title"), limit=300)
         if not title:
             continue
+        media = str(raw.get("media") or "").strip()
+        if media not in MEDIA_KINDS:
+            media = ""
         normalized_events.append(
             {
                 "day": raw["day"],
@@ -2659,6 +2676,8 @@ def _normalize_scenario_schema(schema):
                 "title": title,
                 "involved": involved,
                 "tags": tags,
+                "media": media,
+                "media_title": _bounded_text(raw.get("media_title") or raw.get("title"), limit=300),
             }
         )
     if not normalized_events:
@@ -2786,15 +2805,20 @@ def _offline_scenario_lite(title_hint, combined):
         a2 = agents[(d + 1) % len(agents)]["key"]
         verb, echo, beat = beat_bank[d % len(beat_bank)]
         subject = agents[(d + 2) % len(agents)]["name"]
-        events.append(
-            {
-                "day": d,
-                "date": f"Day {d + 1}",
-                "title": f"{subject} {verb} the story: {echo}. {subject}.",
-                "involved": [a1, a2],
-                "tags": [beat, emo_tags.get(beat, "news")],
-            }
-        )
+        event = {
+            "day": d,
+            "date": f"Day {d + 1}",
+            "title": f"{subject} {verb} the story: {echo}. {subject}.",
+            "involved": [a1, a2],
+            "tags": [beat, emo_tags.get(beat, "news")],
+        }
+        # Every few days the world stops to listen: a speech or a broadcast.
+        media_kinds = ("speech", "broadcast", "press")
+        if len(agents) >= 4 and d % 7 in (3, 5) and (d // 7) % 2 == 0:
+            kind = media_kinds[(d // 7) % len(media_kinds)]
+            event["media"] = kind
+            event["media_title"] = f"{subject} {verb} the story"
+        events.append(event)
     return {
         "title": title,
         "date_range": "Compressed timeframe",

@@ -353,5 +353,20 @@ def muse_model():
     return META_MODELS[0] if META_KEY else None
 
 
+VOICE_MODEL = os.environ.get("ARK_VOICE_MODEL", "").strip()
+
+
+def voice_model():
+    """The model that speaks: ARK_VOICE_MODEL wins, else Gemini's lite (our
+    voice head-to-head), else Muse Spark, else None."""
+    if VOICE_MODEL:
+        return VOICE_MODEL
+    if GEMINI_KEY:
+        lite = next((m for m in GEMINI_MODELS if "3.5" in m and "lite" in m), None)
+        lite = lite or next((m for m in GEMINI_MODELS if "lite" in m), None)
+        return lite or (GEMINI_MODELS[0] if GEMINI_MODELS else None)
+    return META_MODELS[0] if META_KEY else None
+
+
 def llm_available():
     return llm_status()["configured"]

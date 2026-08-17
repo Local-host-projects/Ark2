@@ -181,9 +181,22 @@ function quoteCardHTML(post) {
 
 /* ---------------------------------------------------------------- rendering */
 
-function postHTML(post, sc, { isReply = false, delay = 0 } = {}) {
+function timeHTML(post) {
+  const clock = post.clock || "";
+  const date = post.date || "";
+  const stamp = [date, clock].filter(Boolean).join(" · ");
+  const back = (App.up_to ?? post.day ?? 0) - (post.day ?? 0);
+  if (back > 0) {
+    const span = back === 1 ? "1 DAY BACK" : `${back} DAYS BACK`;
+    return `<span class="post-time">${stamp ? `<span class="post-time-stamp">${esc(stamp)}</span> ` : ""}<span class="post-time-dist">⤺ ${span}</span></span>`;
+  }
+  return stamp
+    ? `<span class="post-time">${esc(stamp)}</span>`
+    : `<span class="post-time post-time-ghost">now</span>`;
+}
+
+function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
   const a = post.agent || {};
-  const time = esc(post.clock || "");
   const body = esc(post.text || "");
   const kind = MEDIA_LABEL[post.kind] ? post.kind : "";
   const media = kind ? "" : surpriseCard(post);
@@ -200,7 +213,7 @@ function postHTML(post, sc, { isReply = false, delay = 0 } = {}) {
     ? `<div class="media-text media-${kind}">${photo}${mediaLinesHTML(post.text, Number(post.id))}</div>`
     : `<p class="post-body">${body}</p>`;
   return `
-  <article class="post ${isReply ? "is-reply" : ""}${kind ? ` kind-${kind}` : ""}" style="animation-delay:${delay}s">
+  <article class="post ${isReply ? "is-reply" : ""}${kind ? ` kind-${kind}` : ""}${fresh ? "" : " static"}" style="animation-delay:${delay}s">
     <a href="${agentHref(sc.key, a)}">${avatarHTML(a, "", { mood: true })}</a>
     <div class="post-body-wrap">
       <div class="post-head">
@@ -210,7 +223,7 @@ function postHTML(post, sc, { isReply = false, delay = 0 } = {}) {
         ${roletag(a.category)}
         ${a.background ? `<span class="roletag rt-individual">PASSERBY</span>` : ""}
         ${kind ? `<span class="media-chip media-${kind}">${MEDIA_LABEL[post.kind]}</span>` : ""}
-        ${time ? `<span class="post-time">${time}</span>` : `<span class="post-time post-time-ghost">now</span>`}
+        ${timeHTML(post)}
       </div>
       ${bodyHTML}
       <div class="post-actions">
@@ -223,19 +236,24 @@ function postHTML(post, sc, { isReply = false, delay = 0 } = {}) {
 }
 
 function postsHTML(posts, sc) {
+  App._seenPosts = App._seenPosts || new Set();
   const out = [];
   const seen = new Set();
   for (const p of posts) {
     if (p.parent_id) continue;
     const base = (p.event_id || 0) % 5;
-    out.push(postHTML(p, sc, { delay: base * 0.05 }));
+    const fresh = !App._seenPosts.has(Number(p.id));
+    out.push(postHTML(p, sc, { isReply: false, delay: fresh ? base * 0.05 : 0, fresh }));
+    App._seenPosts.add(Number(p.id));
     if (p.replies && p.replies.length) {
       let replyStep = 1;
       for (const r of p.replies) {
         if (seen.has(r.id)) continue;
         seen.add(r.id);
         const step = Math.min(replyStep++, 6);
-        out.push(postHTML(r, sc, { isReply: true, delay: base * 0.05 + step * 0.45 }));
+        const rf = !App._seenPosts.has(Number(r.id));
+        out.push(postHTML(r, sc, { isReply: true, delay: fresh ? base * 0.05 + step * 0.45 : 0, fresh: rf }));
+        App._seenPosts.add(Number(r.id));
       }
     }
   }
@@ -245,7 +263,7 @@ function postsHTML(posts, sc) {
 /* ---- media cards: photo + full dialogue in a modal ---- */
 const MediaCards = {};
 function registerMedia(post, scenarioKey) {
-  if (!post || (!post.image_url && !post.video_url)) return;
+  if (!post || !post.text) return;
   MediaCards[Number(post.id)] = {
     img: post.image_url,
     title: `${post.agent?.name || ""} · ${post.clock || post.date || ""}`,
@@ -258,6 +276,20 @@ function registerMedia(post, scenarioKey) {
       .split(/\n+/)
       .map((l) => l.trim())
       .filter(Boolean),
+  };
+}
+
+function registerStoryMedia(story, scenarioKey) {
+  if (!story || !story.post_id) return;
+  MediaCards[Number(story.post_id)] = {
+    img: story.image_url || "",
+    title: `${story.byline || ""} · ${story.date || ""}${story.clock ? ` · ${story.clock}` : ""}`,
+    mediaKind: story.kind || "",
+    scenario: scenarioKey || "",
+    agent: story.agent_key || "",
+    video_url: story.video_url || "",
+    footage_label: story.footage_label || "",
+    lines: [story.headline || "", story.lede || ""],
   };
 }
 
@@ -276,7 +308,10 @@ function mediaLinesHTML(text, postId, max = 3) {
     .filter(Boolean);
   const shown = lines.slice(0, max);
   const extra = lines.length - shown.length;
-  return `<div class="media-lines">${shown.map(dialogLineHTML).join("")}${extra > 0 ? `<button class="media-more" data-action="media" data-media="${postId}">${extra} more lines — open the full transcript</button>` : ""}</div>`;
+  const more = extra > 0
+    ? `<button class="media-more" data-action="media" data-media="${postId}">${extra} more lines — open the full transcript</button>`
+    : `<button class="media-more" data-action="media" data-media="${postId}">Open the full transcript</button>`;
+  return `<div class="media-lines">${shown.map(dialogLineHTML).join("")}${more}</div>`;
 }
 
 function openMediaModal(id) {
@@ -290,7 +325,16 @@ function openMediaModal(id) {
   const footage = $("#mediaFootage");
   if (video) video.hidden = true;
   if (footage) footage.hidden = true;
-  if (img) { img.hidden = false; img.src = card.img; img.alt = card.title; }
+  if (img) {
+    if (card.img) {
+      img.hidden = false;
+      img.src = card.img;
+      img.alt = card.title;
+    } else {
+      img.hidden = true;
+      img.removeAttribute("src");
+    }
+  }
   if (card.video_url) {
     if (video) {
       video.src = card.video_url;
@@ -345,6 +389,13 @@ const App = {
 
 function routeIsScenario(key) {
   return location.hash.startsWith(`#/scenario/${routePart(key)}`);
+}
+
+function feedPosKey(key) { return `ark_feed_pos_${key}`; }
+
+function savedFeedPos(key) {
+  const saved = Number(localStorage.getItem(feedPosKey(key)) || "0");
+  return Number.isInteger(saved) && saved > 0 ? saved : 0;
 }
 
 function clearViewWork() {
@@ -435,7 +486,7 @@ async function scenario(key, selectedDay = null, tab = "feed") {
   App.openDays = ent.open_days;
   App.nextUnlock = ent.next_unlock_seconds;
   App.pacingMinutes = ent.pacing_minutes;
-  const requested = Number.isInteger(selectedDay) ? selectedDay : 0;
+  const requested = Number.isInteger(selectedDay) ? selectedDay : savedFeedPos(key);
   App.up_to = Math.max(0, Math.min(requested, ent.open_days - 1));
   await loadFeed(sc, App.up_to);
   watchWorldBuild(sc);
@@ -456,6 +507,7 @@ async function loadFeed(sc, upTo) {
   App.nextUnlock = data.next_unlock_seconds;
   App.followedCount = data.followed_count || 0;
   App.up_to = Math.max(0, Math.min(data.up_to, App.openDays - 1));
+  try { localStorage.setItem(feedPosKey(sc.key), String(App.up_to)); } catch (e) {}
   const posts = data.posts || [];
   const prev = new Map(App.feed.map((p) => [p.id, p]));
   App.feed = posts.map((p) => ({ ...p, replies: prev.get(p.id)?.replies || [] }));
@@ -742,6 +794,8 @@ async function renderFrontPage(sc) {
   const mast = data.masthead;
   const lead = data.lead;
   const stories = data.stories || [];
+  registerStoryMedia(lead, sc.key);
+  stories.forEach((s) => registerStoryMedia(s, sc.key));
   const body = `
   <div class="frontpage">
     ${mast ? `
