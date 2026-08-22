@@ -4,7 +4,9 @@ import json
 import sqlite3
 from contextlib import contextmanager
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ark.db")
+DB_PATH = os.environ.get("ARK_DB_PATH") or os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "ark.db"
+)
 
 
 def get_conn():
