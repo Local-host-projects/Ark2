@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.compiler import compile_design
 
-BASE = Path(__file__).resolve().parent.parent
+BASE = Path(__file__).resolve().parent
 
 app = FastAPI(title="Planner", version="1.0.0")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")

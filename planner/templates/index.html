@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Planner — design your backend, compile a spec</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Cpath d='M9 12l3 4-3 4M15 19h6' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body data-level="2">
+
+  <!-- ============ LAUNCH ============ -->
+  <section id="screen-launch" class="screen">
+    <div class="launch-card">
+      <div class="launch-logo">
+        <div class="mark">P</div>
+        <div>
+          <h1>Planner</h1>
+          <div class="tag">Design your backend by hand. Compile it into a precise prompt.</div>
+        </div>
+      </div>
+
+      <div class="feature-strip tex">
+        <div class="feat"><b>@ mentions</b>pin tables &amp; columns</div>
+        <div class="feat"><b>free: …</b>open requirements</div>
+        <div class="feat"><b>Quiz loop</b>auto ask the AI questions</div>
+      </div>
+
+      <h2>New project</h2>
+      <label class="lbl" for="p-name">Project name</label>
+      <input id="p-name" type="text" placeholder="e.g. SnackShop API" value="My Backend" />
+
+      <label class="lbl" for="p-desc">What does it do? (optional)</label>
+      <textarea id="p-desc" rows="3" placeholder="One or two sentences about the product and its rules."></textarea>
+
+      <label class="lbl">Architecture</label>
+      <div class="arch-grid" id="arch-grid">
+        <div class="arch-opt active" data-arch="monolithic">
+          <div class="t">Monolithic</div>
+          <div class="d">One deployable app: web layer, services, DB in a single service.</div>
+        </div>
+        <div class="arch-opt" data-arch="modular-monolithic">
+          <div class="t">Modular monolithic</div>
+          <div class="d">One deployable, but features split into strict internal modules.</div>
+        </div>
+      </div>
+
+      <label class="lbl">UI assistance level</label>
+      <div class="range-row">
+        <span>1</span>
+        <input id="p-level" type="range" min="1" max="4" step="1" value="2" />
+        <span>4</span>
+      </div>
+      <div class="level-labels">
+        <span>bare canvas</span><span>guided</span><span>very guided</span>
+      </div>
+      <div class="level-desc" id="level-desc">Moderate guidance: tips on forms, hints in the diagram.</div>
+
+      <div id="launch-actions" style="display:grid; gap:9px; margin-top:18px;">
+        <button class="btn btn-primary" id="btn-start">Start planning</button>
+        <button class="btn" id="btn-sample">Load the example design instead</button>
+      </div>
+      <div class="hint" style="margin-top:12px; text-align:center;">
+        Routes, middleware and jobs live in the left rail. The <span class="kbd">Compile</span> button turns the whole design into a
+        deterministic JSON prompt, an AI-quiz blueprint, and a feedback loop.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BUILDER ============ -->
+  <section id="screen-builder" class="screen hidden">
+    <header id="topbar">
+      <div class="brand">
+        <div class="mark">P</div>
+        <span>Planner</span>
+      </div>
+      <div class="project-name" id="project-name"></div>
+      <div class="spacer"></div>
+      <div class="level-mini">
+        UI help
+        <input id="top-level" type="range" min="1" max="4" step="1" value="2" title="UI assistance level" />
+        <span id="top-level-val">2</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btn-project-settings">Settings</button>
+      <button class="btn btn-primary" id="btn-compile">Compile &amp; Export</button>
+    </header>
+
+    <div id="layout">
+      <nav id="rail">
+        <div class="rail-label">Backend design</div>
+        <div class="nav-item active" data-tab="design" title="Tables and relations on a canvas">
+          <span>◈</span> Data model <span class="count" id="count-tables">0</span>
+        </div>
+        <div class="nav-item" data-tab="routes" title="HTTP endpoints you want exposed">
+          <span>⇢</span> Routes <span class="count" id="count-routes">0</span>
+        </div>
+        <div class="nav-item" data-tab="middleware" title="Middleware written in plain language">
+          <span>◇</span> Middleware <span class="count" id="count-mw">0</span>
+        </div>
+        <div class="nav-item" data-tab="jobs" title="Scheduled background jobs">
+          <span>▸</span> Jobs <span class="count" id="count-jobs">0</span>
+        </div>
+        <div class="nav-item" data-tab="feedback" title="Fold AI quiz answers back into the spec">
+          <span>※</span> Review loop <span class="count" id="count-feedback">0</span>
+        </div>
+        <div class="rail-action">
+          <button class="btn btn-primary btn-sm" id="btn-new-table">+ New table</button>
+          <button class="btn btn-sm" id="btn-connect" data-lvl="3">✶ Connect columns</button>
+          <button class="btn btn-sm" id="btn-arrange" data-lvl="3">↔ Auto arrange</button>
+        </div>
+        <div class="hint help" data-lvl="2" style="margin-top:14px; padding:8px;">
+          <b>How to draw links:</b> click a column on one table, then click a column on another table.
+          Relations keep the generated schema honest.
+        </div>
+      </nav>
+
+      <main id="content"></main>
+      <aside id="inspector"></aside>
+    </div>
+  </section>
+
+  <!-- ============ EXPORT ============ -->
+  <section id="screen-export" class="screen hidden">
+    <header id="topbar">
+      <div class="brand"><div class="mark">P</div><span>Planner</span></div>
+      <div class="project-name" id="export-title"></div>
+      <div class="spacer"></div>
+      <div class="stat-chip" id="export-stats"></div>
+      <button class="btn" id="btn-back">← Back to design</button>
+      <button class="btn" id="btn-download">Download JSON</button>
+      <button class="btn btn-primary" id="btn-print">Print / PDF</button>
+    </header>
+    <div id="export-body">
+      <nav id="export-tabs">
+        <button class="exp-tab active" data-exp="prompt">
+          <div class="t">AI Prompt</div>
+          <div class="d">The compiled spec to give your code-generating AI.</div>
+        </button>
+        <button class="exp-tab" data-exp="json">
+          <div class="t">JSON spec</div>
+          <div class="d">The deterministic machine-readable design.</div>
+        </button>
+        <button class="exp-tab" data-exp="quiz">
+          <div class="t">Quiz blueprint</div>
+          <div class="d">Prompt that makes an AI build an HTML quiz app that interrogates the design.</div>
+        </button>
+        <button class="exp-tab" data-exp="feedback">
+          <div class="t">Feedback template</div>
+          <div class="d">Wrap the AI's quiz answers back into the spec.</div>
+        </button>
+        <button class="exp-tab" data-exp="diagnostics">
+          <div class="t">Diagnostics</div>
+          <div class="d">What the compiler found wrong or uncertain.</div>
+        </button>
+      </nav>
+      <div id="export-pane"></div>
+    </div>
+  </section>
+
+  <div id="popover" class="hidden"></div>
+  <div id="freehint" class="hidden"></div>
+  <div id="toast"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
