@@ -1,10 +1,10 @@
 """LLM service for ARK.
 
 Provider priority (the first configured provider is used by default):
-  1. AgentRouter     — gpt-5.6-sol (GPT-5.6 Sol) primary (AGENTROUTER_API_KEY), OpenAI-compatible
-  2. Google Gemini (Google AI Studio) — GEMINI_API_KEY, OpenAI-compatible endpoint
-  3. OpenRouter       — DeepSeek + Gemini + GPT (OPENROUTER_API_KEY)
-  4. Meta Model API   — Muse Spark (META_API_KEY / MODEL_API_KEY), OpenAI-compatible
+  1. Google Gemini (Google AI Studio) — GEMINI_API_KEY, OpenAI-compatible endpoint
+  2. Meta Model API   — Muse Spark (META_API_KEY / MODEL_API_KEY), OpenAI-compatible
+  3. AgentRouter     — gpt-5.6-sol (GPT-5.6 Sol) primary (AGENTROUTER_API_KEY), OpenAI-compatible
+  4. OpenRouter       — DeepSeek + Gemini + GPT (OPENROUTER_API_KEY)
 Set ARK_LLM_PROVIDER_FALLBACK=1 to try later providers after a failure.
 The deterministic offline generator keeps the app available either way.
 """
@@ -74,15 +74,19 @@ SYSTEM_BASE = (
 
 
 def _providers():
-    """Yield (label, base_url, key, models) for each configured provider."""
-    if AGENTROUTER_KEY:
-        yield ("agentrouter", AGENTROUTER_URL, AGENTROUTER_KEY, AGENTROUTER_MODELS)
+    """Yield (label, base_url, key, models) for each configured provider.
+
+    Priority: Gemini → Muse Spark (Meta) → AgentRouter → OpenRouter.
+    Set ARK_LLM_PROVIDER_FALLBACK=1 to try later providers after a failure.
+    """
     if GEMINI_KEY:
         yield ("gemini", GEMINI_URL, GEMINI_KEY, GEMINI_MODELS)
-    if OPENROUTER_KEY:
-        yield ("openrouter", OPENROUTER_URL, OPENROUTER_KEY, OPENROUTER_MODELS)
     if META_KEY:
         yield ("meta", META_URL, META_KEY, META_MODELS)
+    if AGENTROUTER_KEY:
+        yield ("agentrouter", AGENTROUTER_URL, AGENTROUTER_KEY, AGENTROUTER_MODELS)
+    if OPENROUTER_KEY:
+        yield ("openrouter", OPENROUTER_URL, OPENROUTER_KEY, OPENROUTER_MODELS)
 
 
 def llm_status():
