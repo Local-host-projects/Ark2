@@ -653,10 +653,12 @@ function renderFeed(sc) {
       <a class="stab${App.scenarioTab === "frontpage" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/frontpage" role="tab" aria-selected="${App.scenarioTab === "frontpage"}">Front Page</a>
       <a class="stab${App.scenarioTab === "trending" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/trending" role="tab" aria-selected="${App.scenarioTab === "trending"}">Trending</a>
       <a class="stab${App.scenarioTab === "search" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/search" role="tab" aria-selected="${App.scenarioTab === "search"}">Search</a>
+      <a class="stab${App.scenarioTab === "map" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/map" role="tab" aria-selected="${App.scenarioTab === "map"}">Map</a>
     </div>
 
     <div class="feed-modes" id="feedModes" role="tablist" aria-label="Feed view">
       <button class="fm${App.feedMode === "chrono" ? " on" : ""}" data-mode="chrono" role="tab" aria-selected="${App.feedMode === "chrono"}">Chronology</button>
+      <button class="fm${App.feedMode === "dynamic" ? " on" : ""}" data-mode="dynamic" role="tab" aria-selected="${App.feedMode === "dynamic"}">Dynamic</button>
       ${Session.user ? `
       <button class="fm${App.feedMode === "following" ? " on" : ""}" data-mode="following" role="tab" aria-selected="${App.feedMode === "following"}">Following</button>
       <button class="fm${App.feedMode === "for_you" ? " on" : ""}" data-mode="for_you" role="tab" aria-selected="${App.feedMode === "for_you"}">For You</button>` : ""}
@@ -795,7 +797,31 @@ function renderFeedMore(sc, more) {
   const cur = Math.min(App.up_to ?? 0, dayMax);
   const sealed = cur >= App.openDays - 1 && App.openDays < sc.days;
   if (sealed) {
-    more.innerHTML = `<div class="seal-block"><span class="stamp">THE NEXT MOMENT IS STILL HAPPENING</span><p>The feed arrives on its own clock — nobody in it knows how anything ends yet, and neither can you.</p></div>`;
+    const secs = App.nextUnlock || 0;
+    let countdown = "";
+    if (secs > 0) {
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      countdown = h > 0
+        ? `Unlocks in ${h}h ${m}m`
+        : `Unlocks in ${m}m`;
+      // Start a live countdown timer
+      setTimeout(() => {
+        const el = $("#countdownTimer");
+        if (!el) return;
+        let remaining = secs - 1;
+        if (remaining <= 0) {
+          el.textContent = "Ready now";
+          el.closest(".seal-block")?.querySelector(".btn-gold")?.removeAttribute("disabled");
+          return;
+        }
+        const hh = Math.floor(remaining / 3600);
+        const mm = Math.floor((remaining % 3600) / 60);
+        el.textContent = hh > 0 ? `${hh}h ${mm}m` : `${mm}m`;
+        App.nextUnlock = remaining;
+      }, 1000);
+    }
+    more.innerHTML = `<div class="seal-block"><span class="stamp">THE NEXT MOMENT IS STILL HAPPENING</span><p>The feed arrives on its own clock — nobody in it knows how anything ends yet, and neither can you.</p>${countdown ? `<p class="pacing-countdown" id="countdownTimer">${countdown}</p>` : ""}</div>`;
   } else if (cur < dayMax) {
     more.innerHTML = `<div style="text-align:center;padding:16px"><button class="btn btn-gold" id="genMore">See what happens next →</button></div>`;
     const gen = $("#genMore");
@@ -817,6 +843,7 @@ function scenarioTabsHTML(sc, active) {
       <a class="stab${active === "frontpage" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/frontpage" role="tab" aria-selected="${active === "frontpage"}">Front Page</a>
       <a class="stab${active === "trending" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/trending" role="tab" aria-selected="${active === "trending"}">Trending</a>
       <a class="stab${active === "search" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/search" role="tab" aria-selected="${active === "search"}">Search</a>
+      <a class="stab${active === "map" ? " on" : ""}" href="#/scenario/${routePart(sc.key)}/map" role="tab" aria-selected="${active === "map"}">Map</a>
     </div>`;
 }
 
@@ -899,6 +926,7 @@ async function renderScenarioView(sc, tab) {
   if (tab === "frontpage") return renderFrontPage(sc);
   if (tab === "trending") return renderTrending(sc);
   if (tab === "search") return renderSearch(sc);
+  if (tab === "map") return renderMap(sc);
 }
 
 async function renderFrontPage(sc) {
@@ -1067,6 +1095,202 @@ async function doSearch(sc, q) {
   revealObserve(box);
 }
 
+/* ------------------------------------------------- MAP / UNIMAP */
+
+let _mapInstance = null;
+let _mapMarkers = [];
+
+async function renderMap(sc) {
+  const el = $("#app");
+  App.scenarioTab = "map";
+  el.innerHTML = scenarioViewShell(sc, "map", `
+    <div class="map-controls">
+      <button class="btn btn-ghost btn-sm map-mode on" id="mapModeCity" data-mode="city">City View</button>
+      <button class="btn btn-ghost btn-sm map-mode" id="mapModeWorld" data-mode="world">World View</button>
+    </div>
+    <div id="mapContainer" class="map-container"></div>
+    <div id="mapCityPanel" class="map-city-panel" style="display:none"></div>
+    <div id="mapWorldPanel" class="map-world-panel" style="display:none"></div>
+  `);
+
+  // Wire mode toggle
+  const cityBtn = $("#mapModeCity");
+  const worldBtn = $("#mapModeWorld");
+  if (cityBtn) cityBtn.onclick = () => { cityBtn.classList.add("on"); worldBtn?.classList.remove("on"); renderMapCityMode(sc); };
+  if (worldBtn) worldBtn.onclick = () => { worldBtn.classList.add("on"); cityBtn?.classList.remove("on"); renderMapWorldMode(sc); };
+
+  await renderMapCityMode(sc);
+}
+
+async function renderMapCityMode(sc) {
+  const panel = $("#mapCityPanel");
+  if (panel) panel.style.display = "none";
+  const worldPanel = $("#mapWorldPanel");
+  if (worldPanel) worldPanel.style.display = "none";
+
+  let data;
+  try {
+    data = await api(`/api/scenario/${routePart(sc.key)}/map?up_to=${App.up_to}`);
+  } catch (e) {
+    if (e.status === 401) return;
+    const container = $("#mapContainer");
+    if (container) container.innerHTML = `<div class="err-banner">${esc(e.message)}</div>`;
+    return;
+  }
+  const cities = data.cities || [];
+  initLeafletMap(cities, sc, false);
+}
+
+async function renderMapWorldMode(sc) {
+  const panel = $("#mapCityPanel");
+  if (panel) panel.style.display = "none";
+  const worldPanel = $("#mapWorldPanel");
+
+  let data;
+  try {
+    data = await api(`/api/scenario/${routePart(sc.key)}/world?up_to=${App.up_to}`);
+  } catch (e) {
+    if (e.status === 401) return;
+    const container = $("#mapContainer");
+    if (container) container.innerHTML = `<div class="err-banner">${esc(e.message)}</div>`;
+    return;
+  }
+
+  if (worldPanel) {
+    worldPanel.style.display = "block";
+    const trending = data.trending_event;
+    worldPanel.innerHTML = `
+      <div class="world-overview">
+        <h3>WORLD OVERVIEW</h3>
+        <div class="world-stats">
+          <div class="world-stat"><span class="ws-num">${data.total_posts || 0}</span><span class="ws-label">TOTAL POSTS</span></div>
+          <div class="world-stat"><span class="ws-num">${data.active_cities || 0}</span><span class="ws-label">ACTIVE CITIES</span></div>
+          <div class="world-stat"><span class="ws-num">${data.total_cities || 0}</span><span class="ws-label">TOTAL CITIES</span></div>
+        </div>
+        ${trending ? `<div class="world-trending"><span class="stamp">TRENDING</span><p>${esc(trending.title)}</p><span class="stamp">DAY ${trending.day + 1} · ${esc(trending.date || "")}</span></div>` : ""}
+        <div class="world-city-list">
+          ${(data.cities || []).sort((a, b) => b.post_count - a.post_count).map(c => `
+            <button class="world-city-item" data-city="${esc(c.key)}">
+              <span class="wci-name">${esc(c.name)}</span>
+              <span class="wci-count">${c.post_count} posts</span>
+              ${c.trending ? `<span class="wci-trend">${esc(c.trending.title)}</span>` : ""}
+            </button>
+          `).join("")}
+        </div>
+      </div>`;
+    // Wire city click to drill down
+    worldPanel.querySelectorAll(".world-city-item").forEach(btn => {
+      btn.onclick = () => {
+        const cityKey = btn.dataset.city;
+        showCityFeed(sc, cityKey);
+      };
+    });
+  }
+
+  const cities = (data.cities || []);
+  initLeafletMap(cities, sc, true);
+}
+
+function initLeafletMap(cities, sc, zoomedOut) {
+  const container = $("#mapContainer");
+  if (!container || typeof L === "undefined") {
+    if (container) container.innerHTML = `<div class="map-fallback">Map requires an internet connection for tiles.</div>`;
+    return;
+  }
+
+  // Destroy old map
+  if (_mapInstance) {
+    _mapInstance.remove();
+    _mapInstance = null;
+  }
+  _mapMarkers = [];
+
+  container.innerHTML = "";
+  container.style.height = "500px";
+
+  const center = zoomedOut ? [40, 15] : [48, 10];
+  const zoom = zoomedOut ? 2 : 4;
+
+  _mapInstance = L.map(container, { zoomControl: true, attributionControl: true }).setView(center, zoom);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 18,
+  }).addTo(_mapInstance);
+
+  // Add city markers
+  cities.forEach(city => {
+    const lat = parseFloat(city.lat);
+    const lon = parseFloat(city.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+
+    const size = Math.min(30, Math.max(12, 12 + Math.sqrt(city.post_count || 0) * 2));
+    const marker = L.circleMarker([lat, lon], {
+      radius: size / 2,
+      fillColor: "#DA583E",
+      color: "#100E0B",
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.8,
+    }).addTo(_mapInstance);
+
+    marker.bindTooltip(`<b>${esc(city.name)}</b><br>${city.post_count || 0} posts`, { direction: "top", offset: [0, -8] });
+    marker.on("click", () => showCityFeed(sc, city.key));
+
+    // Post count badge
+    if (city.post_count > 0) {
+      const icon = L.divIcon({
+        className: "map-badge",
+        html: `<span>${city.post_count}</span>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+      L.marker([lat, lon], { icon, interactive: false }).addTo(_mapInstance);
+    }
+
+    _mapMarkers.push(marker);
+  });
+
+  // Fit bounds if we have markers
+  if (_mapMarkers.length > 0) {
+    const group = L.featureGroup(_mapMarkers);
+    _mapInstance.fitBounds(group.getBounds().pad(0.2));
+  }
+}
+
+async function showCityFeed(sc, cityKey) {
+  const panel = $("#mapCityPanel");
+  if (!panel) return;
+  panel.style.display = "block";
+
+  let data;
+  try {
+    data = await api(`/api/scenario/${routePart(sc.key)}/city/${esc(cityKey)}?up_to=${App.up_to}`);
+  } catch (e) {
+    panel.innerHTML = `<div class="err-banner">${esc(e.message)}</div>`;
+    return;
+  }
+
+  const posts = data.posts || [];
+  const cityName = cityKey.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  panel.innerHTML = `
+    <div class="city-panel-head">
+      <button class="btn btn-ghost btn-sm" id="closeCityPanel">← Back to map</button>
+      <h3>${esc(cityName)}</h3>
+    </div>
+    <div class="city-feed-posts">
+      ${posts.length === 0 ? `<div class="status"><span class="stamp">NO DISPATCHES YET</span><p>Nothing has been posted from ${esc(cityName)} yet.</p></div>` : ""}
+      ${posts.map(p => postHTML([p], sc)).join("")}
+    </div>`;
+
+  wirePostActions(panel, sc.key);
+  revealObserve(panel);
+
+  const closeBtn = $("#closeCityPanel");
+  if (closeBtn) closeBtn.onclick = () => { panel.style.display = "none"; };
+}
+
 let toastTimer = null;
 function flashToast(msg) {
   let t = $("#toast");
@@ -1120,6 +1344,7 @@ async function route() {
     if (view === "scenario" && p1 && p2 === "frontpage") return await scenario(p1, null, "frontpage");
     if (view === "scenario" && p1 && p2 === "trending") return await scenario(p1, null, "trending");
     if (view === "scenario" && p1 && p2 === "search") return await scenario(p1, null, "search");
+    if (view === "scenario" && p1 && p2 === "map") return await scenario(p1, null, "map");
     if (view === "scenario" && p1) {
       const day = p2 === "day" ? Number(p3) : null;
       return await scenario(p1, Number.isInteger(day) ? day : null, p2 === "day" ? null : (p2 || "feed"));

@@ -114,6 +114,11 @@ def _start_generation_worker():
                         if ff:
                             key, event_id = ff
                             core.backfill_footage(key, event_id)
+                # Pre-generate the next day so content is ready when it unlocks
+                try:
+                    core.pre_generate_next_day()
+                except Exception:
+                    pass
             except Exception as e:  # noqa
                 log.warning("background generation: %s", e)
             stop.wait(interval)
@@ -280,7 +285,7 @@ def feed(
     if auto and u:
         core.generate_up_to(key, up_to)
 
-    if mode not in ("chrono", "following", "for_you"):
+    if mode not in ("chrono", "following", "for_you", "dynamic"):
         mode = "chrono"
     posts = core.get_feed(key, up_to, user_id=(u["id"] if u else None), mode=mode)
     return {
@@ -383,6 +388,50 @@ def street(
         "up_to": up_to,
         "street": core.recent_street(key, up_to),
     }
+
+
+@app.get("/api/scenario/{key}/map")
+def scenario_map(
+    key: str,
+    authorization: str | None = Header(None),
+    up_to: int | None = None,
+):
+    u = _user(authorization)
+    sc, up_to = _open_window(key, u, up_to)
+    return {
+        "scenario": key,
+        "up_to": up_to,
+        "cities": core.get_scenario_cities(key, up_to),
+    }
+
+
+@app.get("/api/scenario/{key}/city/{city_key}")
+def city_feed(
+    key: str,
+    city_key: str,
+    authorization: str | None = Header(None),
+    up_to: int | None = None,
+    limit: int = 20,
+):
+    u = _user(authorization)
+    sc, up_to = _open_window(key, u, up_to)
+    return {
+        "scenario": key,
+        "city": city_key,
+        "up_to": up_to,
+        "posts": core.get_city_feed(key, city_key, up_to, limit=limit),
+    }
+
+
+@app.get("/api/scenario/{key}/world")
+def world_overview(
+    key: str,
+    authorization: str | None = Header(None),
+    up_to: int | None = None,
+):
+    u = _user(authorization)
+    sc, up_to = _open_window(key, u, up_to)
+    return core.get_world_overview(key, up_to)
 
 
 @app.post("/api/scenario/{key}/day/{day}/generate")
