@@ -114,6 +114,12 @@ def _start_generation_worker():
                         if ff:
                             key, event_id = ff
                             core.backfill_footage(key, event_id)
+                        else:
+                            # Try day-batch generation for builtins
+                            batch = core.next_pending_day_batch()
+                            if batch:
+                                key, day = batch
+                                core.generate_day_batch(key, day)
                 # Pre-generate the next day so content is ready when it unlocks
                 try:
                     core.pre_generate_next_day()
@@ -412,6 +418,7 @@ def city_feed(
     authorization: str | None = Header(None),
     up_to: int | None = None,
     limit: int = 20,
+    day: int | None = None,
 ):
     u = _user(authorization)
     sc, up_to = _open_window(key, u, up_to)
@@ -419,7 +426,7 @@ def city_feed(
         "scenario": key,
         "city": city_key,
         "up_to": up_to,
-        "posts": core.get_city_feed(key, city_key, up_to, limit=limit),
+        "posts": core.get_city_feed(key, city_key, up_to, limit=limit, day=day),
     }
 
 
@@ -447,7 +454,7 @@ def generate_a_day(key: str, day: int, authorization: str | None = Header(None))
     started = core.start_playing(u["id"], key)
     if day >= core.unlocked_day(key, started, sc["days"]):
         raise HTTPException(403, "That feed-day is still sealed.")
-    n = core.generate_day(key, day)
+    n = core.generate_day_batch(key, day)
     return {"ok": True, "day": day, "events_generated": n}
 
 

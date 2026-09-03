@@ -12,7 +12,6 @@ const esc = (s) =>
     "'": "&#39;",
   }[c]));
 
-const CAT_LABEL = { leader: "LEADER", news: "PRESS", individual: "CIVILIAN" };
 const MEDIA_LABEL = {
   speech: "SPEECH", interview: "INTERVIEW", broadcast: "BROADCAST", press: "PRESS RELEASE",
 };
@@ -96,7 +95,6 @@ async function api(path, opts = {}) {
 function avatarHTML(agent, cls = "", opts = {}) {
   const prefix = `avatar ${cls}`;
   if (!agent) return `<div class="${prefix} sm"></div>`;
-  const catCls = agent.category === "news" ? "wire-av" : agent.category === "leader" ? "leader-av" : "individual-av";
   const base = agent.name || "?";
   const initials = base.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const src =
@@ -111,12 +109,7 @@ function avatarHTML(agent, cls = "", opts = {}) {
   else inner = esc(initials);
   const dot = opts.mood && agent.mood
     ? `<i class="mood-dot" title="${esc(MOOD_LABEL[agent.mood] || agent.mood)}"></i>` : "";
-  return `<div class="${prefix} ${catCls}"${mood}>${inner}${dot}</div>`;
-}
-
-function roletag(cat) {
-  const safe = Object.prototype.hasOwnProperty.call(CAT_LABEL, cat) ? cat : "individual";
-  return `<span class="roletag rt-${safe}">${CAT_LABEL[safe]}</span>`;
+  return `<div class="${prefix}"${mood}>${inner}${dot}</div>`;
 }
 
 function agentHref(scenario, agent) {
@@ -228,8 +221,6 @@ function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
         <a class="post-name" href="${agentHref(sc.key, a)}">${esc(a.name || "Anonymous")}</a>
         ${a.verified ? `<span class="verified" title="Grounded in source">✦</span>` : ""}
         <span class="post-handle">@${esc(a.handle || a.agent_key || "")}</span>
-        ${roletag(a.category)}
-        ${a.background ? `<span class="roletag rt-individual">PASSERBY</span>` : ""}
         ${kind ? `<span class="media-chip media-${kind}">${MEDIA_LABEL[post.kind]}</span>` : ""}
         ${timeHTML(post)}
       </div>
@@ -1084,7 +1075,6 @@ async function doSearch(sc, q) {
           ${avatarHTML(a)}
           <span class="search-person-name">${esc(a.name || "")}</span>
           <span class="post-handle">@${esc(a.handle || a.agent_key || "")}</span>
-          ${roletag(a.category)}
         </a>`).join("")}
     </div></div>` : ""}
 
@@ -1472,8 +1462,6 @@ async function profile(scenarioKey, agentKey) {
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <h2>${esc(a.name)}</h2>
             ${a.verified ? `<span class="verified">✦</span>` : ""}
-            ${roletag(a.category)}
-            ${a.background ? `<span class="roletag rt-individual">PASSERBY</span>` : ""}
           </div>
           <div class="p-handle">@${esc(a.handle)}</div>
           <p class="p-bio">${esc(a.bio || "")}</p>

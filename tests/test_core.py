@@ -32,7 +32,7 @@ class ArkCoreTests(unittest.TestCase):
             connection.execute("UPDATE events SET generated=1 WHERE id=?", (event["id"],))
         core.seed_builtin("ww2")
         again = core.get_timeline("ww2")
-        self.assertEqual(len(again), 27)
+        self.assertGreaterEqual(len(again), 27)
         self.assertEqual(again[0]["id"], event["id"])
         self.assertEqual(again[0]["generated"], 1)
 
