@@ -1938,6 +1938,7 @@ def generate_day_batch(scenario_key, day):
 
     MIN_POSTS = 15
     MIN_REPLIES = 7
+    filler_repliers = []
 
     # Use the first event as the "current moment" for fallback generation
     first_event = dict(evs[0]) if evs else {}
@@ -1975,7 +1976,7 @@ def generate_day_batch(scenario_key, day):
         candidates = [
             m for m in filler_repliers
             if m["agent_key"] not in reply_keys_so_far
-        ] if 'filler_repliers' in dir() else []
+        ]
         if len(candidates) < need:
             try:
                 _extra_posts, extra_repliers = _street_cast(
