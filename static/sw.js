@@ -1,4 +1,4 @@
-const CACHE = "ark-v7";
+const CACHE = "ark-v8";
 const ASSETS = ["/", "/styles.css", "/app.js", "/manifest.webmanifest", "/logo.svg", "/icon-32.png", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {

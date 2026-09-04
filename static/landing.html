@@ -16,13 +16,13 @@
 <style>
   .landing-page{max-width:960px;margin:0 auto;padding:0 20px}
   .landing-nav{
-    position:sticky;top:0;z-index:50;background:rgba(16,14,11,.86);
-    backdrop-filter:blur(14px);border-bottom:1px solid var(--ink-3);
+    position:sticky;top:0;z-index:50;background:rgba(16,14,11,.92);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--ink-3);
   }
   .landing-nav .nav-in{display:flex;align-items:center;justify-content:space-between;height:var(--nav-h)}
   .landing-links{display:flex;gap:26px;align-items:center}
-  .landing-links a{font:500 .875rem var(--sans);color:var(--paper-dim);padding:8px 0;transition:color .15s}
-  .landing-links a:hover{color:var(--paper)}
+  .landing-links a{font:500 .875rem var(--sans);color:var(--paper-dim);padding:8px 0;transition:color .15s;border-bottom:2px solid transparent}
+  .landing-links a:hover{color:var(--paper);border-bottom-color:var(--ink-5)}
   .landing-hero{padding:clamp(56px,10vw,120px) 0 40px;text-align:center}
   .landing-hero .kicker{
     display:inline-flex;align-items:center;gap:10px;margin-bottom:24px;
@@ -37,7 +37,8 @@
   .landing-principles h2{font:500 clamp(1.6rem,4vw,2.4rem)/1.1 var(--serif);text-align:center;text-wrap:balance}
   .landing-principles p.sub{color:var(--paper-dim);text-align:center;max-width:56ch;margin:14px auto 0;line-height:1.6}
   .landing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:36px}
-  .landing-card{border:1px solid var(--ink-3);border-radius:var(--r-card);background:var(--ink-2);padding:24px}
+  .landing-card{border:1px solid var(--ink-4);border-radius:var(--r-card);background:var(--ink-2);padding:24px;transition:border-color .2s,border-radius .2s}
+  .landing-card:hover{border-color:var(--ink-5)}
   .landing-card .stamp{color:var(--gold);margin-bottom:12px;display:block}
   .landing-card h4{font:600 1.05rem var(--sans);margin-bottom:8px}
   .landing-card p{color:var(--paper-dim);font-size:.9rem;line-height:1.6}

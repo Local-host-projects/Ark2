@@ -1926,9 +1926,11 @@ async function you() {
       <label for="authPass" style="margin-top:14px">Password</label>
       <input id="authPass" class="txt" type="password" placeholder="••••••••" autocomplete="current-password" />
       <div class="status-line" id="authStatus"></div>
-      <button class="btn btn-gold btn-block" id="authGo" style="margin-top:16px">Sign in</button>
-      <button class="btn btn-ghost btn-block" id="authReg" style="margin-top:8px">Create account</button>
-      <button class="btn btn-ghost btn-block" id="installBtn" hidden style="margin-top:16px">Install ARK</button>
+      <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-gold btn-block" id="authGo">Sign in</button>
+        <button class="btn btn-primary btn-block" id="authReg">Create account</button>
+      </div>
+      <button class="btn btn-ghost btn-block" id="installBtn" hidden style="margin-top:12px">Install ARK</button>
     </div>
   </div>`;
 
