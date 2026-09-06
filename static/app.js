@@ -114,6 +114,71 @@ function avatarHTML(agent, cls = "", opts = {}) {
   return `<div class="${prefix}"${mood}>${inner}${dot}</div>`;
 }
 
+const RESOURCE_SOURCE_LABEL = {
+  wikipedia: "Wikipedia", wikimedia: "Wikimedia Commons", loc: "Library of Congress",
+  smithsonian: "Smithsonian", picryl: "PICRYL", unsplash: "Unsplash", pexels: "Pexels",
+  flickr_british_library: "British Library", wikiquote: "Wikiquote", "api-ninjas": "API Ninjas",
+  zenquotes: "ZenQuotes", oanor: "Oanor", chronam: "Chronicling America",
+  "loc-docs": "Library of Congress", exa: "Exa Search", "archive.org": "Archive.org",
+  youtube: "YouTube", aapb: "American Archive", "loc-audio": "Library of Congress",
+  numbersapi: "Numbers API", poetrydb: "Poetry Database",
+};
+
+function resourceCardHTML(r) {
+  if (!r || !r.type) return "";
+  const src = RESOURCE_SOURCE_LABEL[r.source] || r.source || "";
+  switch (r.type) {
+    case "image":
+      return `<figure class="resource-card resource-image">
+        <img src="${esc(r.url)}" alt="${esc(r.title)}" loading="lazy">
+        ${r.title ? `<figcaption>${esc(r.title)} <span class="resource-src">${esc(src)}</span></figcaption>` : ""}
+      </figure>`;
+    case "quote":
+      return `<blockquote class="resource-card resource-quote">
+        <p>${esc(r.title)}</p>
+        ${r.description ? `<footer>— ${esc(r.description)} <span class="resource-src">${esc(src)}</span></footer>` : ""}
+      </blockquote>`;
+    case "document":
+      return `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="resource-card resource-document">
+        <span class="resource-title">${esc(r.title)}</span>
+        ${r.description ? `<span class="resource-snippet">${esc(r.description)}</span>` : ""}
+        <span class="resource-src">${esc(src)}</span>
+      </a>`;
+    case "video":
+    case "audio": {
+      let embedSrc = "";
+      const vu = r.url || "";
+      if (/youtu\.be|youtube\.com/.test(vu)) {
+        let vid = "";
+        if (/youtu\.be/.test(vu)) { vid = vu.split("/").pop().split("?")[0]; }
+        else { const m = vu.match(/[?&]v=([^&]+)/); vid = m ? m[1] : vu.split("/").pop().split("?")[0]; }
+        if (vid) embedSrc = `https://www.youtube.com/embed/${esc(vid)}`;
+      } else if (/archive\.org/.test(vu)) {
+        embedSrc = vu;
+      } else {
+        embedSrc = vu;
+      }
+      if (embedSrc) {
+        return `<div class="resource-card resource-${r.type}">
+          <iframe src="${esc(embedSrc)}" title="${esc(r.title)}" frameborder="0" allowfullscreen loading="lazy"></iframe>
+          <span class="resource-src">${esc(src)}</span>
+        </div>`;
+      }
+      return `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="resource-card resource-${r.type}">
+        <span class="resource-title">${esc(r.title)}</span>
+        <span class="resource-src">${esc(src)}</span>
+      </a>`;
+    }
+    case "poem":
+      return `<div class="resource-card resource-poem">
+        <div class="resource-poem-text">${esc(r.title).replace(/\n/g, "<br>")}</div>
+        ${r.description ? `<span class="resource-src">${esc(r.description)} — ${esc(src)}</span>` : ""}
+      </div>`;
+    default:
+      return "";
+  }
+}
+
 function agentHref(scenario, agent) {
   return `#/scenario/${routePart(scenario)}/agent/${routePart(agent.agent_key)}`;
 }
@@ -221,6 +286,13 @@ function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
     }
     if (embedSrc) videoHTML = `<div class="post-video"><iframe src="${esc(embedSrc)}" title="Embedded video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`;
   }
+  let resourcesHTML = "";
+  if (post.resources && post.resources.length) {
+    const resCards = post.resources.slice(0, 3).map(r => resourceCardHTML(r)).filter(Boolean);
+    if (resCards.length) {
+      resourcesHTML = `<div class="post-resources">${resCards.join("")}</div>`;
+    }
+  }
   const repliers = (post.replies || []).slice(0, 3);
   const replierCount = (post.replies || []).length;
   const socialProof = replierCount > 0
@@ -242,6 +314,7 @@ function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
       </div>
       ${bodyHTML}
       ${videoHTML}
+      ${resourcesHTML}
       ${socialProof}
       <div class="post-actions">
         ${follow}

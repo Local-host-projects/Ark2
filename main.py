@@ -637,6 +637,19 @@ def research(key: str, day: int = 0, q: str = "", authorization: str | None = He
     return core.research_topic(key, int(day), (q or "")[:500], source_text)
 
 
+@app.get("/api/scenario/{key}/resources/{day}")
+def get_resources(key: str, day: int, authorization: str | None = Header(None)):
+    """Fetch all resources for a specific day (images, quotes, docs, videos)."""
+    from ark import resources as res_mod
+    u = _user(authorization)
+    sc = core.get_scenario(key)
+    if not sc:
+        raise HTTPException(404, "scenario not found")
+    if day < 0 or day >= sc["days"]:
+        raise HTTPException(400, "feed-day is outside this scenario")
+    return res_mod.resource_harness(key, int(day))
+
+
 # ---------------------------------------------------------------- create custom
 
 

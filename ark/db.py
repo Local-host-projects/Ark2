@@ -165,6 +165,32 @@ def init_db():
                 created_at TEXT DEFAULT (datetime('now')),
                 PRIMARY KEY (scenario_key, day, section)
             );
+            CREATE TABLE IF NOT EXISTS post_resources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scenario_key TEXT,
+                day INTEGER,
+                post_id INTEGER,
+                resource_type TEXT,
+                url TEXT,
+                title TEXT,
+                source TEXT,
+                description TEXT DEFAULT '',
+                attribution TEXT DEFAULT '',
+                metadata TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_res_scen_day ON post_resources(scenario_key, day);
+            CREATE INDEX IF NOT EXISTS idx_res_post ON post_resources(post_id);
+            CREATE INDEX IF NOT EXISTS idx_res_type ON post_resources(resource_type);
+            CREATE TABLE IF NOT EXISTS resource_cache (
+                scenario_key TEXT,
+                day INTEGER,
+                source TEXT,
+                query TEXT,
+                data TEXT DEFAULT '[]',
+                created_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (scenario_key, day, source, query)
+            );
             """
         )
         # migrations for older DBs
@@ -187,7 +213,7 @@ def init_db():
         _ensure_cols(
             c,
             "posts",
-            {"thought": "TEXT DEFAULT ''", "likes": "INTEGER DEFAULT 0", "dislikes": "INTEGER DEFAULT 0", "clock": "TEXT DEFAULT ''", "image_url": "TEXT DEFAULT ''", "video_url": "TEXT DEFAULT ''", "footage_label": "TEXT DEFAULT ''"},
+            {"thought": "TEXT DEFAULT ''", "likes": "INTEGER DEFAULT 0", "dislikes": "INTEGER DEFAULT 0", "clock": "TEXT DEFAULT ''", "image_url": "TEXT DEFAULT ''", "video_url": "TEXT DEFAULT ''", "footage_label": "TEXT DEFAULT ''", "resources": "TEXT DEFAULT '[]'"},
         )
         _ensure_cols(
             c,

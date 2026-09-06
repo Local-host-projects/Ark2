@@ -1834,6 +1834,13 @@ def generate_day_batch(scenario_key, day):
     all_posts = []  # (event, agent_key, text, image_url)
     all_replies = []  # (event, agent_key, target_key, text)
 
+    # Fetch resources for this day
+    try:
+        from . import resources as _res_mod
+        day_resources = _res_mod.resource_harness(scenario_key, day)
+    except Exception:
+        day_resources = {"images": [], "quotes": [], "documents": [], "videos": [], "audio": [], "poems": []}
+
     # Phase 1: Generate posts one agent at a time
     for ev in evs:
         event = dict(ev)
@@ -2112,11 +2119,21 @@ def generate_day_batch(scenario_key, day):
     for event, agent_key, text, image_url, event_id, base_clock in all_posts:
         footage = _archival_footage(event)
         video_url, footage_label = footage if footage else ("", "")
+        # Select resources for this post
+        try:
+            from . import resources as _res_mod
+            agent_meta = _agent_meta(scenario_key, agent_key)
+            post_resources = _res_mod.select_resources_for_post(
+                agent_meta or {}, event, day_resources, max_resources=3
+            )
+        except Exception:
+            post_resources = []
+        resources_json = json.dumps(post_resources, ensure_ascii=False) if post_resources else "[]"
         with db.get_conn() as c:
             cur = c.execute(
                 "INSERT INTO posts "
-                "(scenario_key,day,date,agent_key,event_id,parent_id,kind,text,thought,likes,dislikes,clock,image_url,video_url,footage_label) "
-                "VALUES (?,?,?,?,?,NULL,?,?,'',?,?,?,?,?,?)",
+                "(scenario_key,day,date,agent_key,event_id,parent_id,kind,text,thought,likes,dislikes,clock,image_url,video_url,footage_label,resources) "
+                "VALUES (?,?,?,?,?,NULL,?,?,'',?,?,?,?,?,?,?)",
                 (
                     scenario_key,
                     event["day"],
@@ -2131,9 +2148,16 @@ def generate_day_batch(scenario_key, day):
                     image_url or "",
                     video_url,
                     footage_label,
+                    resources_json,
                 ),
             )
             post_id = cur.lastrowid
+            # Store resources in post_resources table
+            if post_resources:
+                try:
+                    _res_mod.store_post_resources(post_id, scenario_key, event["day"], post_resources)
+                except Exception:
+                    pass
             # Store post_id for reply mapping
             for i, item in enumerate(all_posts):
                 ev2, ak2 = item[0], item[1]
