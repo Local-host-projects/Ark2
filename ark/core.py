@@ -2940,6 +2940,7 @@ def get_feed(scenario_key, up_to_day=None, user_id=None, mode="chrono"):
     items = []
     for r in rows:
         d = dict(r)
+        d["resources"] = db.json_loads(d.get("resources", "[]"), default=[])
         d["agent"] = enrich_agent(agents.get(d["agent_key"]))
         extra_likes, extra_dislikes = totals.get(d["id"], (0, 0))
         d["likes"] += extra_likes
@@ -3255,7 +3256,11 @@ def get_agent_posts(scenario_key, agent_key, user_id=None, up_to_day=None):
     query += " ORDER BY event_id, id"
     with db.cursor() as cur:
         rows = cur.execute(query, args).fetchall()
-    out = [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["resources"] = db.json_loads(d.get("resources", "[]"), default=[])
+        out.append(d)
     agent = enrich_agent(_agent_meta(scenario_key, agent_key))
     totals = _vote_totals(scenario_key)
     if user_id:
@@ -3341,6 +3346,7 @@ def get_post_thread(post_id, user_id=None):
 
     def enrich_post(row):
         post = dict(row)
+        post["resources"] = db.json_loads(post.get("resources", "[]"), default=[])
         agent = enrich_agent(agents.get(post["agent_key"]))
         if agent and user_id:
             agent["following"] = post["agent_key"] in following
@@ -3392,6 +3398,7 @@ def _post_bundle(scenario_key, up_to_day, user_id):
     items = []
     for r in rows:
         d = dict(r)
+        d["resources"] = db.json_loads(d.get("resources", "[]"), default=[])
         d["agent"] = enrich_agent(agents.get(d["agent_key"]))
         d["event"] = events.get(d["event_id"]) or {}
         extra_likes, extra_dislikes = totals.get(d["id"], (0, 0))
@@ -3531,6 +3538,7 @@ def search(scenario_key, query, up_to_day=None, user_id=None, limit=25):
     following = set(followed_agents(user_id, scenario_key)) if user_id else set()
     for r in rows:
         d = dict(r)
+        d["resources"] = db.json_loads(d.get("resources", "[]"), default=[])
         d["agent"] = enrich_agent(agents.get(d["agent_key"]))
         extra_likes, extra_dislikes = totals.get(d["id"], (0, 0))
         d["likes"] += extra_likes
@@ -3595,6 +3603,7 @@ def recent_street(scenario_key, up_to_day=None, limit=8):
     out = []
     for r in rows:
         d = dict(r)
+        d["resources"] = db.json_loads(d.get("resources", "[]"), default=[])
         d["agent"] = enrich_agent(agents.get(d["agent_key"]))
         extra_likes, extra_dislikes = totals.get(d["id"], (0, 0))
         d["likes"] += extra_likes
@@ -4494,7 +4503,10 @@ def get_city_feed(scenario_key, city_key, up_to=None, limit=20, day=None):
             q += " ORDER BY day DESC, id DESC LIMIT ?"
             params.append(limit)
             rows = cur.execute(q, params).fetchall()
-            posts.extend([dict(r) for r in rows])
+            for r in rows:
+                d = dict(r)
+                d["resources"] = db.json_loads(d.get("resources", "[]"), default=[])
+                posts.append(d)
         # Get posts matching city tags that aren't already included
         if city_tags and len(posts) < limit:
             seen_ids = {p["id"] for p in posts}
@@ -4515,7 +4527,9 @@ def get_city_feed(scenario_key, city_key, up_to=None, limit=20, day=None):
                 rows = cur.execute(q, params).fetchall()
                 for r in rows:
                     if r["id"] not in seen_ids:
-                        posts.append(dict(r))
+                        d = dict(r)
+                        d["resources"] = db.json_loads(d.get("resources", "[]"), default=[])
+                        posts.append(d)
                         seen_ids.add(r["id"])
     # Enrich with agent data
     for p in posts:
