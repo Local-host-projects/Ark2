@@ -157,6 +157,14 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_posts_parent ON posts(parent_id);
             CREATE INDEX IF NOT EXISTS idx_events_scen_day ON events(scenario_key, day);
             CREATE INDEX IF NOT EXISTS idx_votes_post ON votes(post_id);
+            CREATE TABLE IF NOT EXISTS research_cache (
+                scenario_key TEXT,
+                day INTEGER,
+                section TEXT,
+                data TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (scenario_key, day, section)
+            );
             """
         )
         # migrations for older DBs

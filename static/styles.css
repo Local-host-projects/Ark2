@@ -397,6 +397,8 @@ body.modal-open{overflow:hidden}
 .roletag.rt-news{border-color:rgba(78,110,142,.5);color:var(--wire)}
 .roletag.rt-individual{border-color:rgba(111,125,78,.5);color:var(--olive)}
 .post-body{margin-top:6px;font:400 .905rem/1.5 var(--sans);color:var(--paper);white-space:pre-wrap;word-break:break-word}
+.post-video{margin-top:10px;position:relative;width:100%;padding-bottom:56.25%;overflow:hidden;border-radius:10px;background:var(--ink-2)}
+.post-video iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}
 .post-actions{display:flex;gap:4px;margin-top:12px;align-items:center}
 .post-actions .act{
   display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid transparent;cursor:pointer;

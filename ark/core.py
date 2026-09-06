@@ -1065,6 +1065,56 @@ FOOTAGE_ARCHIVE = [
         "url": "https://www.youtube.com/embed/9gwLfdLOmgM",
         "label": "US National Archives (208-UN-106) · D-Day, 6 June 1944",
     },
+    {
+        "needles": ("sputnik", "first satellite", "beep", "laika"),
+        "url": "https://www.youtube.com/embed/0UqyJRZlAXE",
+        "label": "Sputnik 1 launch footage — USSR, 4 Oct 1957",
+    },
+    {
+        "needles": ("gagarin", "first man in space", "vostok", "poyekhali"),
+        "url": "https://www.youtube.com/embed/gPtEvmKmbOA",
+        "label": "Yuri Gagarin — first human spaceflight, Vostok 1, 12 Apr 1961",
+    },
+    {
+        "needles": ("rocket", "saturn", "falcon", "atlas", "titan", "rocket launch", "liftoff", "blast off"),
+        "url": "https://www.youtube.com/embed/nLetGfD_OYk",
+        "label": "NASA rocket launch compilation — Mercury through Apollo era",
+    },
+    {
+        "needles": ("apollo", "moon landing", "one small step", "armstrong", "tranquility base", "eagle has landed"),
+        "url": "https://www.youtube.com/embed/S9HdPi9Ikhk",
+        "label": "Apollo 11 moon landing — Neil Armstrong & Buzz Aldrin, 20 Jul 1969",
+    },
+    {
+        "needles": ("space race", "spaceflight", "manned orbit", "gemini", "mercury", "shepard", "glenn"),
+        "url": "https://www.youtube.com/embed/okFJH4C0VBA",
+        "label": "NASA Mercury-Atlas 6 — John Glenn orbits the Earth, 20 Feb 1962",
+    },
+    {
+        "needles": ("soyuz", "space station", "salyut", "mir", "apollo-soyuz"),
+        "url": "https://www.youtube.com/embed/wxF2BydYqYs",
+        "label": "Apollo-Soyuz Test Project — joint US-Soviet mission, 17 Jul 1975",
+    },
+    {
+        "needles": ("vostok", "voskhod", "spacewalk", "first spacewalk", "leonov"),
+        "url": "https://www.youtube.com/embed/kBMSsfXj7tY",
+        "label": "Alexei Leonov — first spacewalk, Voskhod 2, 18 Mar 1965",
+    },
+    {
+        "needles": ("shuttle", "columbia", "challenger", "discovery", "atlantis", "endeavour"),
+        "url": "https://www.youtube.com/embed/6kb7rXkEj_s",
+        "label": "Space Shuttle launch — STS programme overview, NASA",
+    },
+    {
+        "needles": ("hubble", "telescope", "deep space", "orbiting observatory"),
+        "url": "https://www.youtube.com/embed/e06J5DEmzCw",
+        "label": "Hubble Space Telescope deployment — STS-31, 24 Apr 1990",
+    },
+    {
+        "needles": ("voyager", "golden record", "pale blue dot", "outer planets"),
+        "url": "https://www.youtube.com/embed/2GQ56D9FBpo",
+        "label": "Voyager 1 — 'Pale Blue Dot' and the Golden Record",
+    },
 ]
 
 
@@ -1766,7 +1816,7 @@ def generate_day_batch(scenario_key, day):
     """Generate all events for one feed-day, one agent at a time.
 
     Each agent's preferred model from CHARACTER_HARNESS is used.
-    Targets 15+ main posts and 7+ replies across the day's events.
+    Targets 25+ main posts and 12+ replies across the day's events.
     Falls back to per-event generation if LLM calls fail.
     """
     import random
@@ -1801,7 +1851,7 @@ def generate_day_batch(scenario_key, day):
         # Add street voices
         try:
             street_posters, street_repliers = _street_cast(
-                scenario_key, ev["id"], random.randint(2, 3), random.randint(1, 2), set(involved)
+                scenario_key, ev["id"], random.randint(4, 6), random.randint(2, 4), set(involved)
             )
         except Exception:
             street_posters, street_repliers = [], []
@@ -1929,15 +1979,15 @@ def generate_day_batch(scenario_key, day):
                     if text:
                         all_replies.append((event, agent_key, target_key, text, ev["id"], base_clock))
 
-    # --- Minimum enforcement: 15+ posts, 7+ replies -------------------------
+    # --- Minimum enforcement: 25+ posts, 12+ replies -------------------------
     # If LLM calls left us short, backfill with offline voices so the feed
     # always has enough texture.
     post_keys_so_far = {ak for _, ak, _, _, _, _ in all_posts}
     reply_keys_so_far = {ak for _, ak, _, _, _, _ in all_replies}
     used_all = post_keys_so_far | reply_keys_so_far
 
-    MIN_POSTS = 15
-    MIN_REPLIES = 7
+    MIN_POSTS = 25
+    MIN_REPLIES = 12
     filler_repliers = []
 
     # Use the first event as the "current moment" for fallback generation
@@ -3053,6 +3103,60 @@ def record_signal(user_id, scenario_key, agent_key, kind="read"):
         )
 
 
+def _evolving_bio(a):
+    """Return a dynamically evolving bio based on the agent's current state."""
+    bio = str(a.get("bio", "") or "")
+    scenario_key = a.get("scenario_key", "")
+    agent_key = a.get("agent_key", "")
+    # Count posts
+    post_count = 0
+    if scenario_key and agent_key:
+        try:
+            with db.cursor() as cur:
+                row = cur.execute(
+                    "SELECT COUNT(*) as cnt FROM posts WHERE scenario_key=? AND agent_key=?",
+                    (scenario_key, agent_key),
+                ).fetchone()
+                post_count = row["cnt"] if row else 0
+        except Exception:
+            pass
+    # Emotion-based prefix
+    emo = _dominant_emotion(a)
+    prefix = ""
+    if emo == "fear":
+        prefix = "Growing uneasy about the way things are turning. "
+    elif emo == "anger":
+        prefix = "Frustration is mounting with each passing day. "
+    elif emo == "hope":
+        prefix = "Still finding reasons to believe this ends well. "
+    elif emo == "grief":
+        prefix = "Carrying a weight that doesn't show. "
+    elif emo == "resolve":
+        prefix = "Steady and unflinching, no matter what comes. "
+    # Evolution suffix
+    suffix = ""
+    if post_count > 5:
+        suffix = " Perspectives deepening with each passing day."
+    if prefix or suffix:
+        bio = f"{prefix}{bio}{suffix}".strip()
+    return bio
+
+
+def _agent_avatar_url(a):
+    """Generate a DiceBear initials avatar URL based on agent category."""
+    key = a.get("agent_key", "unknown")
+    cat = a.get("category", "individual")
+    verified = a.get("verified", 0)
+    if verified or cat == "leader":
+        bg = "C9A227"  # gold
+    elif cat == "news":
+        bg = "4E6E8E"  # blue
+    else:
+        bg = "6F7D4E"  # green
+    name = a.get("name", key)
+    return f"https://api.dicebear.com/7.x/initials/svg?seed={name}&backgroundColor={bg}"
+
+
 def enrich_agent(a, scenario_key=None):
     """Parse stored JSON fields into usable shape for the client."""
     if not a:
@@ -3062,6 +3166,8 @@ def enrich_agent(a, scenario_key=None):
     a["relationships"] = db.json_loads(a.get("relationships", ""), default={})
     a["interests"] = db.json_loads(a.get("interests", ""), default=[])
     a["mood"] = _dominant_emotion(a)
+    a["avatar_url"] = _agent_avatar_url(a)
+    a["bio"] = _evolving_bio(a)
     # Attach harness speech patterns if available
     if scenario_key:
         harness = _get_harness(scenario_key)
@@ -3584,6 +3690,275 @@ def _research_query(sc, scene, question):
     if str(question or "").strip():
         parts.append(question)
     return " ".join(str(p).strip() for p in parts if str(p).strip())[:400]
+
+
+# ---------------------------------------------------------------- RESEARCH HARNESS
+# Deep research on 6 topics for a given day: culture, characters, other_events,
+# humor, main_events, regional. Each section is 2-4 paragraphs of grounded
+# research. Results are cached in research_cache to avoid redundant LLM calls.
+
+RESEARCH_HARNESS_SYSTEM = (
+    "You are the ARK research desk producing a deep research harness for a historical "
+    "simulation. For each of the six requested sections, write 2-4 dense, grounded "
+    "paragraphs of period-accurate detail. Distinguish established fact from impression. "
+    "Write for an educated general reader. Use era-appropriate language and specifics: "
+    "street names, brand names, song titles, slang, prices, weather, smells. No emoji, "
+    "no hype, no modern editorialising."
+)
+
+RESEARCH_SECTION_PROMPTS = {
+    "culture": (
+        "Write a 2-4 paragraph culture briefing for this exact moment in time. Cover "
+        "fashion, music, slang, daily life, food, entertainment, morale, what people are "
+        "wearing and watching and humming. Be specific: name songs, films, styles, foods, "
+        "prices, street habits. What does the average person's day look like?"
+    ),
+    "characters": (
+        "Write a 2-4 paragraph character voice profile briefing. For each named person "
+        "who might post at this moment, describe how they would speak in their own voice: "
+        "their vocabulary, their cadence, their private concerns vs public posture. What "
+        "are they worried about right now? What do they want to project? Use their actual "
+        "speech patterns and mannerisms."
+    ),
+    "other_events": (
+        "Write a 2-4 paragraph briefing on OTHER events happening at the same time that "
+        "are NOT the main headline — distractions, side stories, background developments, "
+        "minor incidents, civilian events, weather, sports, culture. What else is in the "
+        "newspaper today? What are people talking about in the queue that has nothing to do "
+        "with the war?"
+    ),
+    "humor": (
+        "Write a 2-4 paragraph briefing on humor, oddities, little human things that "
+        "happened — jokes people are telling, funny moments, odd coincidences, the small "
+        "absurdities of wartime or crisis life. What makes someone laugh right now? What "
+        "is the joke in the pub, the canteen, the queue?"
+    ),
+    "main_events": (
+        "Write a 2-4 paragraph briefing on the main events of this exact moment. What "
+        "just happened or is happening? Who are the key actors? What is the immediate "
+        "stakes? What do people know right now and what are they waiting to find out?"
+    ),
+    "regional": (
+        "Write a 2-4 paragraph briefing on what is happening per region at this moment. "
+        "Cover at least 4 regions with specific city names and approximate coordinates "
+        "(lat/lon). Describe the local situation, mood, and key activity in each region. "
+        "Format as 'Region — City (lat, lon): description'."
+    ),
+}
+
+
+def _get_research_cache(scenario_key, day):
+    """Fetch cached research sections for a scenario day."""
+    result = {}
+    with db.cursor() as cur:
+        rows = cur.execute(
+            "SELECT section, data FROM research_cache WHERE scenario_key=? AND day=?",
+            (scenario_key, day),
+        ).fetchall()
+    for row in rows:
+        result[row["section"]] = row["data"]
+    return result
+
+
+def _set_research_cache(scenario_key, day, section, data):
+    """Store a single research section in the cache."""
+    with db.get_conn() as c:
+        c.execute(
+            "INSERT INTO research_cache (scenario_key, day, section, data) "
+            "VALUES (?,?,?,?) "
+            "ON CONFLICT(scenario_key, day, section) DO UPDATE SET data=excluded.data",
+            (scenario_key, day, section, data),
+        )
+
+
+def _build_research_context(scenario_key, day):
+    """Build the shared context block used across all 6 research sections."""
+    sc = get_scenario(scenario_key)
+    if not sc:
+        return "", None, [], []
+
+    timeline = get_timeline(scenario_key)
+    day_events = [e for e in timeline if e["day"] == day]
+    prior_events = [e for e in timeline if e["day"] < day][-6:]
+
+    scene = day_events[0] if day_events else {"date": "opening", "title": "The story begins"}
+
+    # Agent list
+    with db.cursor() as cur:
+        agent_rows = cur.execute(
+            "SELECT agent_key, name, handle, category, bio, voice FROM agents "
+            "WHERE scenario_key=? AND background=0 ORDER BY id",
+            (scenario_key,),
+        ).fetchall()
+    agent_list = []
+    for a in agent_rows:
+        agent_list.append(f"- {a['name']} (@{a['handle']}, {a['category']}): {str(a['bio'])[:120]}")
+
+    # Timeline window
+    window_lines = []
+    for e in prior_events:
+        window_lines.append(f"- Day {e['day']}: {e['date']} — {e['title']}")
+    for e in day_events:
+        window_lines.append(f"- Day {e['day']}: {e['date']} — {e['title']} (NOW)")
+
+    # Regions from CITIES in scenario module
+    city_info = ""
+    try:
+        mod = importlib.import_module(f"ark.scenarios.{scenario_key}")
+        cities = getattr(mod, "CITIES", [])
+        if cities:
+            city_lines = []
+            for c in cities[:12]:
+                agents_here = ", ".join(c.get("agents", [])[:4]) or "none"
+                city_lines.append(
+                    f"  {c['name']} ({c.get('lat', '?')}, {c.get('lon', '?')}): "
+                    f"agents=[{agents_here}] tags={c.get('tags', [])}"
+                )
+            city_info = "\n".join(city_lines)
+    except (ModuleNotFoundError, AttributeError):
+        pass
+
+    context = (
+        f"Simulation: {sc['title']} ({sc['date_range']})\n"
+        f"Feed-day {day} of {sc['days']} corresponds to approximately: "
+        f"{scene.get('date', 'unknown')} — {scene.get('title', 'unknown')}\n\n"
+        f"TIMELINE (recent + current):\n" + "\n".join(window_lines) + "\n\n"
+        f"KNOWN AGENTS:\n" + "\n".join(agent_list) + "\n"
+    )
+    if city_info:
+        context += f"\nREGIONS / CITIES:\n{city_info}\n"
+
+    return context, scene, day_events, agent_list
+
+
+def research_harness(scenario_key, day):
+    """Deep research on 6 topics for a given day. Returns a dict with keys:
+    culture, characters, other_events, humor, main_events, regional.
+
+    Each section is a string of 2-4 paragraphs of research. Uses LLM
+    (temperature=0.4) and web search via search.exa_search() when available.
+    Results are cached in the research_cache table.
+    """
+    from . import search as _search_mod
+
+    sc = get_scenario(scenario_key)
+    if not sc:
+        raise KeyError("scenario not found")
+    if not isinstance(day, int) or day < 0 or day >= sc["days"]:
+        raise ValueError("feed-day is outside this scenario")
+
+    # Check cache first
+    cached = _get_research_cache(scenario_key, day)
+    if len(cached) == 6:
+        return cached
+
+    context, scene, day_events, agent_list = _build_research_context(scenario_key, day)
+
+    sections = {}
+    llm_ready = llm.llm_available()
+    search_available = _search_mod.exa_configured()
+
+    for section_key, section_prompt in RESEARCH_SECTION_PROMPTS.items():
+        # Check if already cached
+        if section_key in cached:
+            sections[section_key] = cached[section_key]
+            continue
+
+        # Build the full prompt for this section
+        full_prompt = f"{context}\n\nTASK: {section_prompt}\n"
+
+        # Try web search grounding for this section
+        search_results = []
+        if search_available:
+            query = _research_query(sc, scene or {}, section_key)
+            search_results = _search_mod.exa_search(query, num=4)
+
+        if search_results and llm_ready:
+            source_block = "\n".join(
+                f"[{i + 1}] {s['title']} — {s['url']}\n{s['snippet']}"
+                for i, s in enumerate(search_results)
+            )
+            full_prompt += f"\nWEB SOURCES (ground your response; cite inline as [n]):\n{source_block}\n"
+            full_prompt += f"\nWrite the {section_key} briefing (2-4 paragraphs, grounded in sources)."
+
+        elif llm_ready:
+            full_prompt += f"\nWrite the {section_key} briefing (2-4 paragraphs)."
+        else:
+            # Offline fallback
+            sections[section_key] = _offline_research_section(
+                section_key, scene or {}, day_events, agent_list
+            )
+            _set_research_cache(scenario_key, day, section_key, sections[section_key])
+            continue
+
+        # Call LLM
+        text, used_llm = llm.complete(
+            RESEARCH_HARNESS_SYSTEM, full_prompt, temperature=0.4
+        )
+        if text and used_llm:
+            sections[section_key] = text.strip()
+        else:
+            sections[section_key] = _offline_research_section(
+                section_key, scene or {}, day_events, agent_list
+            )
+        _set_research_cache(scenario_key, day, section_key, sections[section_key])
+
+    return sections
+
+
+def _offline_research_section(section_key, scene, day_events, agent_list):
+    """Deterministic offline fallback when no LLM is available."""
+    date = scene.get("date", "this moment")
+    title = scene.get("title", "the current events")
+    event_titles = [e.get("title", "") for e in day_events]
+
+    if section_key == "culture":
+        return (
+            f"Culture around {date}: Daily life continues under the shadow of {title}. "
+            "People go to work, queue for rations, listen to the wireless in the evening. "
+            "Fashion is practical — mended clothes, utility patterns, sensible shoes. "
+            "Music on the radio swings between patriotic songs and the last popular tunes. "
+            "Slang is terse, dry, and often borrowed from the military."
+        )
+    elif section_key == "characters":
+        lines = []
+        for a in agent_list[:6]:
+            lines.append(f"  {a}")
+        return (
+            f"Character voices at {date} — {title}:\n"
+            "Each person speaks from their own world, not the historian's.\n"
+            + "\n".join(lines)
+        )
+    elif section_key == "other_events":
+        return (
+            f"While {title} dominates the headlines on {date}, other stories fill the "
+            "newspapers and conversations. Weather, local politics, sports results, "
+            "factory output, shipping reports — the world does not stop for one event. "
+            "People discuss neighbours, prices, and the latest cinema release."
+        )
+    elif section_key == "humor":
+        return (
+            f"Humor around {date}: Even in crisis, people find things to laugh at. "
+            "The jokes are often dark, self-deprecating, or aimed at bureaucracy. "
+            "The queue is long, but someone always has a line. The wireless announcer "
+            "mispronounces a name and the pub talks about it for an hour."
+        )
+    elif section_key == "main_events":
+        event_text = "; ".join(event_titles[:4]) if event_titles else title
+        return (
+            f"The main events of {date}: {event_text}. "
+            "These moments are what the cast will react to and the street will discuss. "
+            "Details are still emerging, and uncertainty is part of the texture."
+        )
+    elif section_key == "regional":
+        return (
+            f"Regional situation at {date}:\n"
+            "  London — the seat of government, buzzing with dispatches and wire traffic.\n"
+            "  Berlin — the command centre, issuing directives and managing the war effort.\n"
+            "  Washington — isolation giving way to engagement, factories pivoting.\n"
+            "  Moscow — industrial mobilisation, rumour of the next phase."
+        )
+    return f"Section {section_key}: research unavailable offline."
 
 
 # ---------------------------------------------------------------- CUSTOM SCENARIOS

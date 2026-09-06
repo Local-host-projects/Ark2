@@ -98,7 +98,9 @@ function avatarHTML(agent, cls = "", opts = {}) {
   const base = agent.name || "?";
   const initials = base.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const src =
-    agent.avatar_type === "url"
+    agent.avatar_url
+      ? agent.avatar_url
+      : agent.avatar_type === "url"
       ? agent.avatar_url
       : agent.avatar_type === "dicebear"
       ? `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(agent.name)}&background=%23CBB98F`
@@ -205,6 +207,20 @@ function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
   const bodyHTML = kind
     ? `<div class="media-text media-${kind}">${photo}${mediaLinesHTML(post.text, Number(post.id))}</div>`
     : `<p class="post-body">${body}</p>`;
+  let videoHTML = "";
+  if (post.video_url) {
+    let embedSrc = "";
+    const vu = post.video_url;
+    if (/youtu\.be|youtube\.com/.test(vu)) {
+      let vid = "";
+      if (/youtu\.be/.test(vu)) { vid = vu.split("/").pop().split("?")[0]; }
+      else { const m = vu.match(/[?&]v=([^&]+)/); vid = m ? m[1] : vu.split("/").pop().split("?")[0]; }
+      if (vid) embedSrc = `https://www.youtube.com/embed/${esc(vid)}`;
+    } else if (/archive\.org/.test(vu)) {
+      embedSrc = vu;
+    }
+    if (embedSrc) videoHTML = `<div class="post-video"><iframe src="${esc(embedSrc)}" title="Embedded video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`;
+  }
   const repliers = (post.replies || []).slice(0, 3);
   const replierCount = (post.replies || []).length;
   const socialProof = replierCount > 0
@@ -225,6 +241,7 @@ function postHTML(post, sc, { isReply = false, delay = 0, fresh = true } = {}) {
         ${timeHTML(post)}
       </div>
       ${bodyHTML}
+      ${videoHTML}
       ${socialProof}
       <div class="post-actions">
         ${follow}
@@ -385,6 +402,7 @@ const App = {
   feedMode: "chrono",
   followedCount: 0,
   scenarioTab: "feed",
+  selectedDay: null,
 };
 
 function routeIsScenario(key) {
@@ -495,6 +513,7 @@ async function scenario(key, selectedDay = null, tab = "feed") {
   App._renderMaxId = 0;
   App.days = sc.days;
   App.scenarioTab = tab;
+  App.selectedDay = Number.isInteger(selectedDay) ? selectedDay : null;
   const ent = await api(`/api/scenario/${encodedKey}/enter`, { method: "POST" });
   App.openDays = ent.open_days;
   App.nextUnlock = ent.next_unlock_seconds;
@@ -508,9 +527,10 @@ async function scenario(key, selectedDay = null, tab = "feed") {
 
 async function loadFeed(sc, upTo) {
   upTo = Math.min(upTo, App.openDays - 1);
+  const dayParam = App.selectedDay != null ? `&day=${App.selectedDay}` : "";
   let data;
   try {
-    data = await api(`/api/scenario/${routePart(sc.key)}/feed?up_to=${upTo}&auto=1&mode=${App.feedMode}`);
+    data = await api(`/api/scenario/${routePart(sc.key)}/feed?up_to=${upTo}&auto=1&mode=${App.feedMode}${dayParam}`);
   } catch (e) {
     if (e.status === 401) return;
     setFeedError(e.message);
@@ -812,7 +832,7 @@ function renderFeedMore(sc, more) {
         App.nextUnlock = remaining;
       }, 1000);
     }
-    more.innerHTML = `<div class="seal-block"><span class="stamp">THE NEXT MOMENT IS STILL HAPPENING</span><p>The feed arrives on its own clock — nobody in it knows how anything ends yet, and neither can you.</p>${countdown ? `<p class="pacing-countdown" id="countdownTimer">${countdown}</p>` : ""}</div>`;
+    more.innerHTML = `<div class="seal-block"><span class="stamp">WAITING FOR THE NEXT MOMENT</span><p>This moment is sealed. The next one arrives on its own schedule.</p>${countdown ? `<p class="pacing-countdown" id="countdownTimer">${countdown}</p>` : ""}</div>`;
   } else if (cur < dayMax) {
     more.innerHTML = `<div style="text-align:center;padding:16px"><button class="btn btn-gold" id="genMore">See what happens next →</button></div>`;
     const gen = $("#genMore");
@@ -1268,10 +1288,23 @@ async function showCityFeed(sc, cityKey) {
     <div class="city-panel-head">
       <button class="btn btn-ghost btn-sm" id="closeCityPanel">← Back to map</button>
       <h3>${esc(cityName)}</h3>
+      <span class="stamp">${posts.length} dispatch${posts.length === 1 ? "" : "es"} from this city</span>
     </div>
     <div class="city-feed-posts">
       ${posts.length === 0 ? `<div class="status"><span class="stamp">NO DISPATCHES YET</span><p>Nothing has been posted from ${esc(cityName)} yet.</p></div>` : ""}
-      ${posts.map(p => postHTML([p], sc)).join("")}
+      ${posts.map(p => {
+        const a = p.agent || {};
+        const snippet = esc((p.text || "").slice(0, 120)) + ((p.text || "").length > 120 ? "…" : "");
+        return `
+        <a class="city-post-card" href="#/scenario/${routePart(sc.key)}/post/${Number(p.id)}" title="Open this thread">
+          <span class="city-post-avatar">${avatarHTML(a, "xs")}</span>
+          <span class="city-post-info">
+            <span class="city-post-author">${esc(a.name || "Anonymous")}</span>
+            <span class="city-post-snippet">${snippet}</span>
+          </span>
+          <span class="city-post-arrow">→</span>
+        </a>`;
+      }).join("")}
     </div>`;
 
   wirePostActions(panel, sc.key);
@@ -1433,18 +1466,11 @@ async function profile(scenarioKey, agentKey) {
   }
 
   const el = $("#app");
-  const first = data.first_seen;
   const talked = data.talked_to || { replied_to: [], replied_from: [], names: {} };
   const talkNames = (list) => list.map(([key]) => {
     const nm = talked.names[key] || key;
     return `<a class="rel-chip" href="${agentHref(scenarioKey, { agent_key: key })}">${esc(nm)}</a>`;
   }).join("");
-  const backstoryHTML = first
-    ? `<div class="profile-side">
-        <span class="stamp">FIRST ON THE WIRE</span>
-        <p>${esc(first.date || "the opening moment")}${first.clock ? ` · ${esc(first.clock)}` : ""} — they entered the record with “${esc((first.text || "").slice(0, 140))}${(first.text || "").length > 140 ? "…" : ""}”</p>
-      </div>`
-    : "";
   const socialHTML = (talked.replied_to.length || talked.replied_from.length)
     ? `<div class="profile-side">
         <span class="stamp">WHO THEY TALK TO</span>
@@ -1475,11 +1501,6 @@ async function profile(scenarioKey, agentKey) {
           </div>
         </div>
       </div>
-      <div class="profile-side">
-        <span class="stamp">Voice</span>
-        <p>${esc(a.voice || "A voice in this world.")}</p>
-      </div>
-      ${backstoryHTML}
       ${socialHTML}
     </div>
 

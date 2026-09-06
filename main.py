@@ -94,32 +94,37 @@ def _start_generation_worker():
     global _GEN_WORKER
     if _GEN_WORKER is not None or os.environ.get("ARK_TESTING") == "1":
         return
-    interval = max(1.0, float(os.environ.get("ARK_GEN_INTERVAL", "4")))
+    interval = max(1.0, float(os.environ.get("ARK_GEN_INTERVAL", "2")))
     stop = threading.Event()
 
     def loop():
         while not stop.is_set():
             try:
-                pending = core.next_pending_event()
-                if pending:
-                    key, event_id = pending
-                    core.generate_event(key, event_id)
-                else:
+                # Process up to 4 items per tick to fill the world faster
+                for _ in range(4):
+                    if stop.is_set():
+                        break
+                    pending = core.next_pending_event()
+                    if pending:
+                        key, event_id = pending
+                        core.generate_event(key, event_id)
+                        continue
                     bf = core.next_street_backfill()
                     if bf:
                         key, event_id = bf
                         core.backfill_street(key, event_id)
-                    else:
-                        ff = core.next_footage_backfill()
-                        if ff:
-                            key, event_id = ff
-                            core.backfill_footage(key, event_id)
-                        else:
-                            # Try day-batch generation for builtins
-                            batch = core.next_pending_day_batch()
-                            if batch:
-                                key, day = batch
-                                core.generate_day_batch(key, day)
+                        continue
+                    ff = core.next_footage_backfill()
+                    if ff:
+                        key, event_id = ff
+                        core.backfill_footage(key, event_id)
+                        continue
+                    batch = core.next_pending_day_batch()
+                    if batch:
+                        key, day = batch
+                        core.generate_day_batch(key, day)
+                        continue
+                    break  # nothing left to process this tick
                 # Pre-generate the next day so content is ready when it unlocks
                 try:
                     core.pre_generate_next_day()
@@ -270,6 +275,7 @@ def feed(
     up_to: int | None = None,
     auto: int = 1,
     mode: str = "chrono",
+    day: int | None = None,
 ):
     u = _user(authorization)
     sc = core.get_scenario(key)
@@ -294,6 +300,11 @@ def feed(
     if mode not in ("chrono", "following", "for_you", "dynamic"):
         mode = "chrono"
     posts = core.get_feed(key, up_to, user_id=(u["id"] if u else None), mode=mode)
+    if day is not None:
+        day_posts = [p for p in posts if p.get("day") == day]
+        day_post_ids = {p["id"] for p in day_posts}
+        replies = [p for p in posts if p.get("parent_id") in day_post_ids]
+        posts = day_posts + replies
     return {
         "scenario": key,
         "up_to": up_to,
