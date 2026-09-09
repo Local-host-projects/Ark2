@@ -6,7 +6,8 @@ Provider priority (the first configured provider is used by default):
   3. AgentRouter     — gpt-5.6-sol (GPT-5.6 Sol) primary (AGENTROUTER_API_KEY), OpenAI-compatible
   4. OpenRouter       — DeepSeek + Gemini + GPT (OPENROUTER_API_KEY)
 Set ARK_LLM_PROVIDER_FALLBACK=1 to try later providers after a failure.
-The deterministic offline generator keeps the app available either way.
+An LLM provider is required: without one, generation raises instead of
+printing synthetic content.
 """
 import os
 import re
@@ -143,7 +144,7 @@ def _chat(messages, temperature=0.9, max_tokens=420, model=None):
         if err:
             last_err = f"[{label}] {err}"
     if last_err:
-        print("[ark] LLM unavailable; using offline generation:", last_err)
+        print("[ark] LLM call failed:", last_err)
     return None
 
 

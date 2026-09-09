@@ -701,6 +701,7 @@ def _fetch_loc_documents(events, date):
         cache = _get_cache("", 0, "loc-docs", q)
         if cache:
             resources.extend(cache)
+            continue
         data = _get(
             "https://www.loc.gov/search/",
             params={"q": q, "fo": "json", "c": "3"},
@@ -863,38 +864,16 @@ def _fetch_youtube_videos(events, date):
 
 
 def _fetch_aapb_audio(events, date):
-    """Fetch from American Archive of Public Broadcasting (experimental)."""
-    resources = []
-    # AAPB doesn't have a public search API, return links to browse
-    if date:
-        resources.append(_resource(
-            "audio",
-            "https://www.americanarchive.org/",
-            f"Browse broadcasts from {date}",
-            "aapb",
-            "American Archive of Public Broadcasting — historic public TV and radio programs",
-            "Library of Congress / GBH",
-            {},
-        ))
-    return resources
+    """American Archive of Public Broadcasting has no public search API.
+
+    Returns [] — ARK only attaches resources it actually fetched.
+    """
+    return []
 
 
 def _fetch_loc_audio(events, date):
-    """Fetch audio from LOC streaming services."""
-    resources = []
-    for ev in (events or [])[:2]:
-        title = ev.get("title", "")
-        if title:
-            resources.append(_resource(
-                "audio",
-                f"https://www.loc.gov/collections/?q={title.split(':')[0].strip()[:40]}&fa=online-format:audio",
-                f"Audio recordings: {title[:100]}",
-                "loc-audio",
-                "Search LOC audio collections",
-                "Library of Congress",
-                {},
-            ))
-    return resources
+    """LOC audio is covered by document search; no synthetic links."""
+    return []
 
 
 # ===========================================================================
@@ -1113,22 +1092,36 @@ def select_resources_for_post(agent, event, all_resources, max_resources=3):
 
 def store_post_resources(post_id, scenario_key, day, resources):
     """Store resource references for a post in the database."""
+    store_posts_resources([(post_id, scenario_key, day, resources)])
+
+
+def store_posts_resources(rows):
+    """Store resource references for many posts in one transaction.
+
+    rows: iterable of (post_id, scenario_key, day, resources).
+    """
+    batch = []
+    for post_id, scenario_key, day, resources in rows:
+        for r in resources or []:
+            batch.append((
+                scenario_key, day, post_id,
+                r.get("type", ""),
+                r.get("url", ""),
+                r.get("title", ""),
+                r.get("source", ""),
+                r.get("description", ""),
+                r.get("attribution", ""),
+                json.dumps(r.get("metadata", {}), ensure_ascii=False),
+            ))
+    if not batch:
+        return
     with db.get_conn() as c:
-        for r in resources:
+        for row in batch:
             c.execute(
                 "INSERT INTO post_resources "
                 "(scenario_key,day,post_id,resource_type,url,title,source,description,attribution,metadata) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (
-                    scenario_key, day, post_id,
-                    r.get("type", ""),
-                    r.get("url", ""),
-                    r.get("title", ""),
-                    r.get("source", ""),
-                    r.get("description", ""),
-                    r.get("attribution", ""),
-                    json.dumps(r.get("metadata", {}), ensure_ascii=False),
-                ),
+                row,
             )
 
 

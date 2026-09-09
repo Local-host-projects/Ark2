@@ -96,9 +96,21 @@ def _start_generation_worker():
         return
     interval = max(1.0, float(os.environ.get("ARK_GEN_INTERVAL", "2")))
     stop = threading.Event()
+    llm_warned = False
 
     def loop():
+        nonlocal llm_warned
         while not stop.is_set():
+            if not llm.llm_available():
+                if not llm_warned:
+                    log.warning(
+                        "background generation paused: no LLM provider configured "
+                        "(GEMINI_API_KEY / META_API_KEY / AGENTROUTER_API_KEY / OPENROUTER_API_KEY)"
+                    )
+                    llm_warned = True
+                stop.wait(interval)
+                continue
+            llm_warned = False
             try:
                 # Process up to 4 items per tick to fill the world faster
                 for _ in range(4):
@@ -465,7 +477,10 @@ def generate_a_day(key: str, day: int, authorization: str | None = Header(None))
     started = core.start_playing(u["id"], key)
     if day >= core.unlocked_day(key, started, sc["days"]):
         raise HTTPException(403, "That feed-day is still sealed.")
-    n = core.generate_day_batch(key, day)
+    try:
+        n = core.generate_day_batch(key, day)
+    except core.LLMRequiredError as e:
+        raise HTTPException(503, str(e)) from e
     return {"ok": True, "day": day, "events_generated": n}
 
 
@@ -479,7 +494,10 @@ def gen_all(key: str, authorization: str | None = Header(None)):
         raise HTTPException(404, "scenario not found")
     if sc.get("origin") == "builtin" or sc.get("owner_id") != u["id"]:
         raise HTTPException(403, "Only a custom simulation's owner can generate it in full.")
-    n = core.generate_all(key)
+    try:
+        n = core.generate_all(key)
+    except core.LLMRequiredError as e:
+        raise HTTPException(503, str(e)) from e
     return {"ok": True, "events_generated": n}
 
 
@@ -508,6 +526,15 @@ def agent_profile(key: str, agent_key: str, authorization: str | None = Header(N
             break
     if not agent:
         raise HTTPException(404, "agent not found")
+    # Resolve a real photo for verified figures (lazy Wikipedia fetch, cached).
+    try:
+        core.ensure_agent_avatar(key, agent_key)
+        for a in core.list_agents(key):
+            if a["agent_key"] == agent_key:
+                agent = a
+                break
+    except Exception:
+        pass
     posts = core.get_agent_posts(
         key, agent_key, user_id=(u["id"] if u else None), up_to_day=allowed - 1
     )
@@ -634,7 +661,10 @@ def research(key: str, day: int = 0, q: str = "", authorization: str | None = He
     if day >= allowed:
         raise HTTPException(403, "That day is still sealed. The desk cannot research the future.")
     source_text = sc.get("source_text", "") if sc.get("origin") != "builtin" else ""
-    return core.research_topic(key, int(day), (q or "")[:500], source_text)
+    try:
+        return core.research_topic(key, int(day), (q or "")[:500], source_text)
+    except core.LLMRequiredError as e:
+        raise HTTPException(503, str(e)) from e
 
 
 @app.get("/api/scenario/{key}/resources/{day}")
@@ -666,20 +696,24 @@ async def create_experience(
     source_files = []
     if files:
         if len(files) > 5:
-            raise HTTPException(400, "Attach at most 5 text files.")
+            raise HTTPException(400, "Attach at most 5 files.")
         total_bytes = 0
-        allowed = {".txt", ".md", ".csv", ".json", ".html"}
+        allowed = {".txt", ".md", ".csv", ".json", ".html", ".pdf"}
         for f in files:
             filename = os.path.basename(f.filename or "file")
-            if Path(filename).suffix.lower() not in allowed:
+            suffix = Path(filename).suffix.lower()
+            if suffix not in allowed:
                 raise HTTPException(400, f"Unsupported file: {filename}")
-            raw = await f.read(1_000_001)
-            if len(raw) > 1_000_000:
-                raise HTTPException(413, f"{filename} is larger than 1 MB.")
+            raw = await f.read(5_000_001)
+            if len(raw) > 5_000_000:
+                raise HTTPException(413, f"{filename} is larger than 5 MB.")
             total_bytes += len(raw)
-            if total_bytes > 3_000_000:
-                raise HTTPException(413, "Attachments must total under 3 MB.")
-            text = _decode(raw)
+            if total_bytes > 25_000_000:
+                raise HTTPException(413, "Attachments must total under 25 MB.")
+            try:
+                text = _decode_pdf(raw) if suffix == ".pdf" else _decode(raw)
+            except ValueError as e:
+                raise HTTPException(400, f"{filename}: {e}") from e
             source_files.append({"filename": filename, "text": text[:6000]})
     if not source_text.strip() and not source_files:
         raise HTTPException(400, "give us a prompt or a file to work from")
@@ -689,6 +723,8 @@ async def create_experience(
             owner_id=u["id"],
         )
         return {"ok": True, "key": key}
+    except core.LLMRequiredError as e:
+        raise HTTPException(503, str(e)) from e
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
@@ -725,6 +761,39 @@ def _decode(raw: bytes) -> str:
         except Exception:
             continue
     return raw.decode("utf-8", errors="replace")
+
+
+def _decode_pdf(raw: bytes, max_chars: int = 6000) -> str:
+    """Extract readable text from a PDF upload (pypdf)."""
+    try:
+        from pypdf import PdfReader
+    except ImportError as e:
+        raise ValueError("PDF support is unavailable on this server (pypdf missing).") from e
+    import io
+    try:
+        reader = PdfReader(io.BytesIO(raw))
+    except Exception as e:
+        raise ValueError(f"could not be read as a PDF ({e}).") from e
+    if getattr(reader, "is_encrypted", False):
+        try:
+            reader.decrypt("")
+        except Exception:
+            raise ValueError("is encrypted and cannot be read.") from None
+    parts = []
+    for page in reader.pages:
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            continue
+        text = " ".join(text.split())
+        if text:
+            parts.append(text)
+        if sum(len(p) for p in parts) >= max_chars:
+            break
+    out = "\n\n".join(parts)[:max_chars].strip()
+    if not out:
+        raise ValueError("contained no extractable text (scanned images need OCR).")
+    return out
 
 
 # ---------------------------------------------------------------- profile photo

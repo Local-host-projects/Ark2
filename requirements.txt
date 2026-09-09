@@ -4,3 +4,4 @@ requests>=2.31
 python-multipart>=0.0.9
 httpx>=0.24,<0.28
 pydantic>=2.5
+pypdf>=4

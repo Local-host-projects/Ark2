@@ -11,6 +11,7 @@ except Exception as error:  # pragma: no cover - environment compatibility
     TEST_CLIENT_ERROR = error
 
 from ark import auth, core, db, llm
+from tests import fake_llm
 import main
 
 
@@ -23,13 +24,12 @@ class ArkAppTests(unittest.TestCase):
         db.DB_PATH = str(Path(self.tmp.name) / "test.db")
         db.init_db()
         core.seed_builtin("ww2")
-        self.old_available = llm.llm_available
-        llm.llm_available = lambda: False
+        fake_llm.install()
         self.client = TestClient(main.app)
 
     def tearDown(self):
         self.client.close()
-        llm.llm_available = self.old_available
+        fake_llm.uninstall()
         db.DB_PATH = self.old_db
         os.environ.pop("ARK_TESTING", None)
         self.tmp.cleanup()
@@ -44,13 +44,14 @@ class ArkAppTests(unittest.TestCase):
         return body["user"], {"Authorization": f"Bearer {body['token']}"}
 
     def test_seed_is_idempotent_and_preserves_generated_state(self):
+        from ark.scenarios import ww2 as _ww2mod
         timeline = core.get_timeline("ww2")
         event_id = timeline[0]["id"]
         with db.get_conn() as connection:
             connection.execute("UPDATE events SET generated=1 WHERE id=?", (event_id,))
         core.seed_builtin("ww2")
         again = core.get_timeline("ww2")
-        self.assertEqual(len(again), 27)
+        self.assertEqual(len(again), len(_ww2mod.EVENTS))
         self.assertEqual(again[0]["id"], event_id)
         self.assertEqual(again[0]["generated"], 1)
 
@@ -122,6 +123,67 @@ class ArkAppTests(unittest.TestCase):
             files={"file": ("face.png", io.BytesIO(b"not an image"), "image/png")},
         )
         self.assertEqual(fake.status_code, 400)
+
+    def test_create_accepts_pdf_and_enforces_5mb_limit(self):
+        _user, headers = self.register("pdf_owner")
+        pdf = _mini_pdf("Engines stir in Testville for the test world.")
+        created = self.client.post(
+            "/api/experience/create",
+            data={"prompt": "A world from a PDF."},
+            files={"files": ("source.pdf", io.BytesIO(pdf), "application/pdf")},
+            headers=headers,
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertTrue(created.json()["key"].startswith("custom_"))
+
+        big = self.client.post(
+            "/api/experience/create",
+            data={"prompt": "Too big."},
+            files={"files": ("big.txt", io.BytesIO(b"x" * 5_000_001), "text/plain")},
+            headers=headers,
+        )
+        self.assertEqual(big.status_code, 413, big.text)
+
+    def test_create_reports_missing_llm_as_503(self):
+        _user, headers = self.register("nollm_owner")
+        old = llm.llm_available
+        llm.llm_available = lambda: False
+        try:
+            res = self.client.post(
+                "/api/experience/create",
+                data={"prompt": "A world with no provider."},
+                headers=headers,
+            )
+            self.assertEqual(res.status_code, 503, res.text)
+            self.assertIn("LLM", res.json()["detail"])
+        finally:
+            llm.llm_available = old
+
+
+def _mini_pdf(text):
+    """Build a minimal valid single-page PDF holding one text line."""
+    safe = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT /F1 24 Tf 100 700 Td ({safe}) Tj ET".encode("latin-1")
+    objs = [
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+        b"/Resources<</Font<</F1 5 0 R>>>>>>",
+        b"<</Length " + str(len(stream)).encode() + b">>stream\n" + stream + b"\nendstream",
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += str(i).encode() + b" 0 obj\n" + body + b"\nendobj\n"
+    xref = len(out)
+    out += ("xref\n0 %d\n" % (len(objs) + 1)).encode()
+    out += b"0000000000 65535 f \n"
+    for o in offsets:
+        out += ("%010d 00000 n \n" % o).encode()
+    out += ("trailer\n<</Size %d/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)).encode()
+    return bytes(out)
 
 
 if __name__ == "__main__":

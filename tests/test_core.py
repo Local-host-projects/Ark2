@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ark import auth, core, db, llm
+from ark import auth, core, db
+from tests import fake_llm
 
 
 class ArkCoreTests(unittest.TestCase):
@@ -14,11 +15,10 @@ class ArkCoreTests(unittest.TestCase):
         db.DB_PATH = str(Path(self.tmp.name) / "test.db")
         db.init_db()
         core.seed_builtin("ww2")
-        self.old_available = llm.llm_available
-        llm.llm_available = lambda: False
+        fake_llm.install()
 
     def tearDown(self):
-        llm.llm_available = self.old_available
+        fake_llm.uninstall()
         db.DB_PATH = self.old_db
         os.environ.pop("ARK_TESTING", None)
         self.tmp.cleanup()
@@ -203,6 +203,109 @@ class ArkCoreTests(unittest.TestCase):
         self.assertGreaterEqual(panel["population"], 40)
         for voice in panel["voices"]:
             self.assertTrue(voice["agent"])
+
+    def test_generation_requires_llm(self):
+        from ark import llm as _llm
+        old = _llm.llm_available
+        _llm.llm_available = lambda: False
+        try:
+            event = core.get_timeline("ww2")[0]
+            with self.assertRaises(core.LLMRequiredError):
+                core.generate_event("ww2", event["id"])
+            with self.assertRaises(core.LLMRequiredError):
+                core.create_custom_scenario("x", "some source", [], owner_id=None)
+            with self.assertRaises(core.LLMRequiredError):
+                core.research_topic("ww2", 0)
+            # The failed claim leaves the event ungenerated for retry.
+            again = core.get_timeline("ww2")[0]
+            self.assertEqual(again["generated"], 0)
+        finally:
+            _llm.llm_available = old
+
+    def test_research_harness_returns_six_cached_sections(self):
+        sections = core.research_harness("ww2", 0)
+        self.assertEqual(
+            set(sections),
+            {"culture", "characters", "other_events", "humor", "main_events", "regional"},
+        )
+        for text in sections.values():
+            self.assertTrue(text)
+        again = core.research_harness("ww2", 0)
+        self.assertEqual(sections, again)
+
+    def test_research_brief_feeds_generation_prompts(self):
+        brief = core._research_brief_for_prompt("ww2", 0)
+        self.assertTrue(brief)
+        self.assertIn("mock briefing", brief)
+
+    def test_harness_model_pref_keys(self):
+        self.assertEqual(core._harness_model({"preferred_model": "some-exact-model"}), "some-exact-model")
+        self.assertEqual(core._harness_model({"model_pref": "other-model"}), "other-model")
+        self.assertIsNone(core._harness_model({}))
+        self.assertIsNone(core._harness_model(None))
+
+    def test_normalize_location(self):
+        self.assertEqual(
+            core._normalize_location({"place": "Berlin", "lat": 52.5, "lon": 13.4}),
+            ("Berlin", 52.5, 13.4),
+        )
+        place, lat, lon = core._normalize_location({"place": "X", "lat": 999, "lon": -999})
+        self.assertEqual((lat, lon), (90.0, -180.0))
+        self.assertEqual(core._normalize_location("Paris"), ("Paris", 0.0, 0.0))
+        self.assertEqual(core._normalize_location(None), ("", 0.0, 0.0))
+
+    def test_custom_cities_derive_from_event_locations(self):
+        user = self.user()
+        key = core.create_custom_scenario(
+            "Test World", "Engines stir in Testville.", [], owner_id=user["id"]
+        )
+        try:
+            cities = core.get_scenario_cities(key)
+            by_name = {c["name"]: c for c in cities}
+            self.assertEqual(set(by_name), {"Testville", "Old Town"})
+            self.assertAlmostEqual(by_name["Testville"]["lat"], 10.0)
+            self.assertAlmostEqual(by_name["Testville"]["lon"], 20.0)
+            core.generate_day(key, 0)
+            feed = core.get_city_feed(key, by_name["Testville"]["key"])
+            self.assertTrue(feed, "expected posts pinned to Testville")
+            self.assertTrue(all(p["agent"] for p in feed))
+            self.assertTrue(
+                any(p["resources"] for p in feed),
+                "expected harvested resources attached to posts",
+            )
+        finally:
+            core.delete_scenario(key, owner_id=user["id"])
+
+    def test_agent_avatar_prefers_stored_photo_then_dicebear(self):
+        user = self.user()
+        key = core.create_custom_scenario(
+            "Test World", "Engines stir in Testville.", [], owner_id=user["id"]
+        )
+        try:
+            # Unverified street-level figures keep initials avatars.
+            url = core.ensure_agent_avatar(key, "wire")
+            self.assertIn("dicebear.com", url)
+            # A stored photo wins over the fallback.
+            with db.get_conn() as c:
+                c.execute(
+                    "UPDATE agents SET avatar_url=? WHERE scenario_key=? AND agent_key=?",
+                    ("https://example.com/ada.jpg", key, "ada"),
+                )
+            self.assertEqual(core.ensure_agent_avatar(key, "ada"), "https://example.com/ada.jpg")
+            # Verified figures get a lazily fetched portrait (mocked here).
+            old_fetch = core._fetch_wiki_image
+            core._fetch_wiki_image = lambda name, timeout=4: "https://example.com/wiki.jpg"
+            try:
+                with db.get_conn() as c:
+                    c.execute(
+                        "UPDATE agents SET verified=1, avatar_url='' WHERE scenario_key=? AND agent_key=?",
+                        (key, "wire"),
+                    )
+                self.assertEqual(core.ensure_agent_avatar(key, "wire"), "https://example.com/wiki.jpg")
+            finally:
+                core._fetch_wiki_image = old_fetch
+        finally:
+            core.delete_scenario(key, owner_id=user["id"])
 
 
 if __name__ == "__main__":

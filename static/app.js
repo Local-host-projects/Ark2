@@ -1775,7 +1775,8 @@ async function create() {
     <div class="create-hero">
       <span class="stamp" style="color:var(--gold)">NEW EXPERIENCE</span>
       <h2>Build a world from scratch.</h2>
-      <p>Give ARK a prompt or a file — a book, an article, a voice-note transcript — and it assembles the cast (leaders, press, ordinary people), compresses the timeline, and lets you scroll it one day at a time.</p>
+      <p>Give ARK a prompt or a file — a book, an article, a PDF, a voice-note transcript — and it assembles the cast (leaders, press, ordinary people), compresses the timeline, and lets you scroll it one day at a time.</p>
+      <div class="status-line" id="llmBanner"></div>
     </div>
     <div class="create-card">
       <label for="cep">Describe the story, era, or source</label>
@@ -1783,8 +1784,8 @@ async function create() {
       <label class="dropzone" id="dz" for="dzInput">
         <div class="dz-ico">🗎</div>
         <div><span class="stamp">DROP FILES OR CLICK TO ATTACH</span></div>
-        <div>Books, articles, transcripts — anything you can type is enough, files make it richer.</div>
-        <input type="file" id="dzInput" multiple hidden accept=".txt,.md,.csv,.json,.html" />
+        <div>Books, articles, PDFs (up to 5 MB each), transcripts — anything you can type is enough, files make it richer.</div>
+        <input type="file" id="dzInput" multiple hidden accept=".txt,.md,.csv,.json,.html,.pdf" />
       </label>
       <div class="file-list" id="dzList"></div>
       <div class="status-line" id="dzStatus"></div>
@@ -1799,6 +1800,17 @@ async function create() {
   const dz = $("#dz");
   const dzList = $("#dzList");
   const dzStatus = $("#dzStatus");
+
+  // Warn upfront when no LLM provider is configured — generation will refuse.
+  (async () => {
+    try {
+      const h = await api("/api/health");
+      if (h && h.llm && !h.llm.configured) {
+        const b = $("#llmBanner");
+        if (b) b.innerHTML = `<span class="stamp" style="color:var(--vermilion)">NO LLM CONFIGURED</span><span> World-building needs a model provider (GEMINI_API_KEY, META_API_KEY, AGENTROUTER_API_KEY or OPENROUTER_API_KEY). Nothing will generate until one is set.</span>`;
+      }
+    } catch (e) { /* health check is best-effort */ }
+  })();
 
   const renderFiles = () => {
     dzList.innerHTML = files

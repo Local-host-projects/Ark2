@@ -15,6 +15,9 @@ def get_conn():
     journal_mode = "MEMORY" if os.environ.get("ARK_TESTING") == "1" else "WAL"
     conn.execute(f"PRAGMA journal_mode={journal_mode}")
     conn.execute("PRAGMA busy_timeout=20000")
+    # NORMAL is crash-safe under WAL and avoids an fsync per commit.
+    # Generation opens many short transactions; FULL would stall every one.
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -82,7 +85,7 @@ def init_db():
                 scenario_key TEXT,
                 agent_key TEXT,
                 name TEXT, handle TEXT, category TEXT, verified INTEGER,
-                avatar_type TEXT, avatar_text TEXT,
+                avatar_type TEXT, avatar_text TEXT, avatar_url TEXT DEFAULT '',
                 bio TEXT, voice TEXT, interests TEXT,
                 emotion TEXT DEFAULT '{}',
                 relationships TEXT DEFAULT '{}',
@@ -97,7 +100,10 @@ def init_db():
                 day INTEGER, date TEXT, title TEXT,
                 involved TEXT, tags TEXT,
                 generated INTEGER DEFAULT 0,
-                media TEXT DEFAULT ''
+                media TEXT DEFAULT '',
+                location TEXT DEFAULT '',
+                lat REAL DEFAULT 0,
+                lon REAL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS posts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -218,9 +224,10 @@ def init_db():
         _ensure_cols(
             c,
             "events",
-            {"media": "TEXT DEFAULT ''", "media_title": "TEXT DEFAULT ''"},
+            {"media": "TEXT DEFAULT ''", "media_title": "TEXT DEFAULT ''", "location": "TEXT DEFAULT ''", "lat": "REAL DEFAULT 0", "lon": "REAL DEFAULT 0"},
         )
         _ensure_cols(c, "users", {"avatar": "TEXT DEFAULT ''"})
+        _ensure_cols(c, "agents", {"avatar_url": "TEXT DEFAULT ''"})
         _dedupe_events(c)
         c.execute("UPDATE posts SET thought='' WHERE thought<>''")
         c.execute(
