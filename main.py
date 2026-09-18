@@ -36,6 +36,10 @@ log = logging.getLogger("ark")
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 
+# User uploads (profile photos). Point at the persistent volume in production:
+# ARK_UPLOADS_DIR=/data/uploads — otherwise redeploys wipe avatars.
+UPLOADS_DIR = Path(os.environ.get("ARK_UPLOADS_DIR") or (STATIC / "uploads"))
+
 db.init_db()
 
 app = FastAPI(title="ARK")
@@ -821,7 +825,7 @@ async def upload_avatar(
         ext = "webp"
     if not ext:
         raise HTTPException(400, "Use a PNG, JPG, WEBP or GIF image.")
-    uploads = STATIC / "uploads"
+    uploads = UPLOADS_DIR
     uploads.mkdir(parents=True, exist_ok=True)
     for old in uploads.glob(f"user{u['id']}.*"):
         old.unlink(missing_ok=True)
@@ -843,7 +847,7 @@ from fastapi.responses import FileResponse
 def landing():
     return FileResponse(str(STATIC / "landing.html"))
 
-uploads_dir = STATIC / "uploads"
+uploads_dir = UPLOADS_DIR
 uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 app.mount("/", StaticFiles(directory=str(STATIC), html=True), name="static")
