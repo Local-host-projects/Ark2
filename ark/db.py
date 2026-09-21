@@ -10,6 +10,13 @@ DB_PATH = os.environ.get("ARK_DB_PATH") or os.path.join(
 
 
 def get_conn():
+    # Create the parent dir on demand: on first boot against a fresh
+    # volume mount (e.g. /data on PXXL/Railway) the directory may not
+    # exist yet, and sqlite cannot create the file without it.
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
+    except Exception:
+        pass
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=20)
     conn.row_factory = sqlite3.Row
     journal_mode = "MEMORY" if os.environ.get("ARK_TESTING") == "1" else "WAL"

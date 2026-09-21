@@ -120,6 +120,7 @@ Acceptable if Railway history doesn't matter.
 
 | Symptom | Cause / fix |
 |---|---|
+| `sqlite3.OperationalError: unable to open database file` at `db.init_db()` | `ARK_DB_PATH` points somewhere that doesn't exist. Either **add the volume** (Compute & Scaling → Add Volume, mount path `/data`, keep `ARK_DB_PATH=/data/ark.db`) or unset `ARK_DB_PATH` to use the bundled `ark.db` (ephemeral — data lost on redeploy). The app now creates the parent dir on boot (`ark/db.py`), but it cannot invent the volume for you |
 | Build fails on install | Package manager mismatch — force pip + `pip install -r requirements.txt`; check `requirements.txt` is at repo root |
 | Start command exits / port errors | Must listen on `$PORT` exactly: `uvicorn main:app --host 0.0.0.0 --port $PORT`. `127.0.0.1` or hardcoded `8000` fails the health check |
 | 503 "No LLM provider is configured" | By design — add at least one LLM key in Secrets and redeploy |
