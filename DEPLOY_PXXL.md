@@ -51,14 +51,20 @@ a Render/Vercel/Netlify alternative aimed at African developers. How it works:
    |---|---|---|
    | `GEMINI_API_KEY` (and/or `META_API_KEY`, `AGENTROUTER_API_KEY`, `OPENROUTER_API_KEY`) | one of them, yes | Without any LLM provider the app runs but every generation endpoint returns **503** with setup instructions (by design — no synthetic content) |
    | `EXA_API_KEY` | no | Enables live web grounding for research + resource harvest |
-   | `ARK_DB_PATH` | yes (prod) | `/data/ark.db` — must match the volume mount (§3) |
-   | `ARK_UPLOADS_DIR` | yes (prod) | `/data/uploads` — profile photos, else redeploys wipe avatars |
+   | `DATABASE_URL` | yes (prod) | **Neon Postgres** — paste the *pooled* connection string from the Neon dashboard (`...-pooler....neon.tech/...?sslmode=require`). When set, ARK uses Postgres and ignores `ARK_DB_PATH` entirely |
+   | `ARK_DB_PATH` | only without `DATABASE_URL` | `/data/ark.db` — must match the volume mount. Not needed when on Neon |
+   | `ARK_UPLOADS_DIR` | yes (prod) | `/data/uploads` — profile photos, else redeploys wipe avatars (still needs the volume even on Neon) |
    | `ARK_ALLOWED_ORIGINS` | yes | `https://<your-project>.pxxl.pro` (comma-separated with localhost for dev) |
    | `ARK_PACE_MINUTES`, `ARK_GEN_INTERVAL` | no | Pacing + worker tick; defaults fine |
    | `YOUTUBE_API_KEY`, `SMITHSONIAN_API_KEY`, `PEXELS_API_KEY` | no | Extra resource sources; all degrade gracefully |
 
+   **Set up Neon first:** Neon dashboard → new project → copy the pooled
+   connection string → paste as `DATABASE_URL`. The app creates the full
+   schema on first boot (`init_db`), so the database can start empty.
+
 4. **Add the volume.** Compute & Scaling → **Add Volume**, mount path `/data`.
-   Both `ARK_DB_PATH` and `ARK_UPLOADS_DIR` live under it.
+   On Neon this holds uploads (`ARK_UPLOADS_DIR`); without Neon it holds the
+   SQLite file too (`ARK_DB_PATH`).
 5. **Deploy.** Submit → watch build logs → health check hits the port →
    live at `https://<your-project>.pxxl.pro`.
 6. **Verify:** open `/api/health` (expect `{"ok": true, "llm": {...}}`),
@@ -75,12 +81,16 @@ pxxl deploy  # then review the detected build plan when prompted
 
 ## 3. Data migration (Railway → PXXL)
 
-SQLite is just files, so migration is a file copy. Two options:
+Three options, simplest first:
 
 ### Option A — fresh start (simplest)
 Do nothing. On first boot `_startup` re-seeds the builtin WW2 archive and
 users re-register; custom worlds are rebuilt from prompts. Avatars re-uploaded.
 Acceptable if Railway history doesn't matter.
+
+### Option B — carry SQLite + avatars over (no Neon)
+SQLite is just files, so migration is a file copy. Only use this if you are
+*not* moving to Neon (with Neon, use Option C instead).
 
 ### Option B — carry the database + avatars over
 1. **Export from Railway.** From a shell with the Railway CLI (volume attached
@@ -106,11 +116,40 @@ Acceptable if Railway history doesn't matter.
 > ⚠️ Never run two writers against one SQLite file. Migrate with the Railway
 > service **stopped or scaled to zero** to avoid a split-brain DB.
 
+### Option C — migrate SQLite into Neon Postgres (recommended)
+ARK speaks Postgres natively when `DATABASE_URL` is set (same queries, same
+ids — the adapter translates the dialect). Migrate with the bundled script:
+
+1. **Stop the Railway service** (or scale to zero) so nothing writes mid-copy.
+2. **Download the SQLite file** from the Railway volume to your machine:
+   ```bash
+   railway run -- cat /data/ark.db > ark-backup.db
+   # avatars still travel as files:
+   railway run -- tar -czf uploads-backup.tgz -C /data/uploads .
+   ```
+3. **Run the migration** (needs the driver once: `pip install 'psycopg[binary]'`):
+   ```bash
+   ARK_SQLITE_PATH=./ark-backup.db \
+   DATABASE_URL='postgresql://user:pass@ep-xxx-pooler...neon.tech/ark?sslmode=require' \
+   python scripts/migrate_sqlite_to_pg.py
+   ```
+   The script creates the schema, copies every table with ids intact
+   (threads, votes, follows keep pointing at the right rows), resets the
+   id sequences, and prints a per-table `sqlite=N pg=N OK` verification.
+4. **Restore avatars** via the PXXL terminal (uploads stay on the volume):
+   ```bash
+   mkdir -p /data/uploads && tar -xzf uploads-backup.tgz -C /data/uploads
+   ```
+5. **Set `DATABASE_URL` in PXXL Secrets and redeploy.** Sanity check:
+   `/api/health`, log in as an existing user, open an old world.
+
 ## 4. Cutover checklist
 
 - [ ] PXXL deploy green + `/api/health` OK + test world generates
-- [ ] Volume mounted at `/data`; `ARK_DB_PATH=/data/ark.db`, `ARK_UPLOADS_DIR=/data/uploads`
-- [ ] Data migrated (B) or fresh start accepted (A)
+- [ ] Neon: `DATABASE_URL` (pooled string) in Secrets; schema auto-created on boot
+- [ ] Volume mounted at `/data`; `ARK_UPLOADS_DIR=/data/uploads`
+      (`ARK_DB_PATH` only needed if you skip Neon)
+- [ ] Data migrated (C for Neon, B for SQLite-on-volume) or fresh start accepted (A)
 - [ ] Custom domain routed (Domains tab; update DNS A/CNAME as shown), SSL active
 - [ ] `ARK_ALLOWED_ORIGINS` includes the PXXL/custom domain
 - [ ] Railway service kept (stopped, not deleted) for one week as rollback
@@ -120,7 +159,9 @@ Acceptable if Railway history doesn't matter.
 
 | Symptom | Cause / fix |
 |---|---|
-| `sqlite3.OperationalError: unable to open database file` at `db.init_db()` | `ARK_DB_PATH` points somewhere that doesn't exist. Either **add the volume** (Compute & Scaling → Add Volume, mount path `/data`, keep `ARK_DB_PATH=/data/ark.db`) or unset `ARK_DB_PATH` to use the bundled `ark.db` (ephemeral — data lost on redeploy). The app now creates the parent dir on boot (`ark/db.py`), but it cannot invent the volume for you |
+| `sqlite3.OperationalError: unable to open database file` at `db.init_db()` | Gone on Neon (no SQLite file at all). On SQLite: `ARK_DB_PATH` points somewhere that doesn't exist — **add the volume** (mount `/data`, keep `ARK_DB_PATH=/data/ark.db`) or unset `ARK_DB_PATH` to use the bundled `ark.db` (ephemeral). The app creates the parent dir on boot but cannot invent the volume |
+| `DATABASE_URL is set but psycopg is not installed` at boot | The image predates the `psycopg` requirement — redeploy so `pip install -r requirements.txt` picks it up |
+| Neon connection errors / timeouts | Use the **pooled** connection string (`...-pooler...`), keep `?sslmode=require`, and confirm the secret has no trailing spaces/newlines; Neon projects auto-suspend on the free tier — first request after idle takes a few seconds |
 | Build fails on install | Package manager mismatch — force pip + `pip install -r requirements.txt`; check `requirements.txt` is at repo root |
 | Start command exits / port errors | Must listen on `$PORT` exactly: `uvicorn main:app --host 0.0.0.0 --port $PORT`. `127.0.0.1` or hardcoded `8000` fails the health check |
 | 503 "No LLM provider is configured" | By design — add at least one LLM key in Secrets and redeploy |
@@ -132,9 +173,16 @@ Acceptable if Railway history doesn't matter.
 
 ## 6. What was changed in-repo for PXXL
 
-- `main.py`: `ARK_UPLOADS_DIR` env (default `static/uploads`); avatars + static mount use it
-- `.env.example`: PXXL volume/env notes
+- `main.py`: `ARK_UPLOADS_DIR` env (default `static/uploads`); avatars + static mount use it;
+  pool closed on shutdown
+- `ark/db.py`: dual backend — SQLite locally, **Neon Postgres when `DATABASE_URL`
+  is set** (`?`→`%s`, `LIKE`→`ILIKE`, auto `RETURNING id`, dual-access rows,
+  pooled connections). No SQL changes needed anywhere else
+- `ark/auth.py`: session-expiry cutoff computed in Python (was SQLite-only `datetime()`)
+- `scripts/migrate_sqlite_to_pg.py`: row-for-row copy preserving ids + sequence reset + verification
+- `requirements.txt`: `psycopg[binary,pool]`
+- `.env.example`: `DATABASE_URL` + PXXL volume/env notes
 - `.python-version`: pins 3.12
 - This file: research + migration runbook
-- Unchanged and PXXL-ready: `requirements.txt` (detection), `Procfile` start command shape,
-  `/api/health`, always-on background worker, `railway.json` (kept until cutover completes)
+- Unchanged and PXXL-ready: `Procfile` start command shape, `/api/health`,
+  always-on background worker, `railway.json` (kept until cutover completes)

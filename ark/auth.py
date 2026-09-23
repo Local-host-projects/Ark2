@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import os
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from . import db
 
@@ -57,11 +58,14 @@ def issue_token(user_id: int) -> str:
 def user_for_token(token: str) -> dict | None:
     if not token:
         return None
+    # Cutoff computed in Python so the comparison is identical on SQLite
+    # and Postgres (both store "YYYY-MM-DD HH:MM:SS"-prefixed text).
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     with db.cursor() as cur:
         row = cur.execute(
             "SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id "
-            "WHERE s.token=? AND s.created_at > datetime('now', '-30 days')",
-            (token,),
+            "WHERE s.token=? AND s.created_at > ?",
+            (token, cutoff),
         ).fetchone()
     if not row:
         return None

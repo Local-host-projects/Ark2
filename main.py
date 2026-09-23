@@ -160,6 +160,10 @@ def _shutdown():
     global _GEN_WORKER
     if _GEN_WORKER is not None:
         _GEN_WORKER = None  # daemon thread; process is exiting anyway
+    try:
+        db.close_pool()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------- health
